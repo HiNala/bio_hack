@@ -4,7 +4,7 @@ interface EmptyStateProps {
   onExampleClick: (query: string) => void;
 }
 
-const exampleQueries = [
+const EXAMPLE_QUERIES = [
   "What are the health effects of intermittent fasting?",
   "Compare CRISPR vs traditional gene therapy",
   "How does the double slit experiment work with molecules?",
@@ -14,79 +14,85 @@ const exampleQueries = [
 
 export function EmptyState({ onExampleClick }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fadeIn px-4">
-      {/* Icon */}
-      <div
-        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-        style={{ backgroundColor: 'var(--bg-secondary)' }}
-      >
-        <svg
-          className="w-8 h-8"
-          style={{ color: 'var(--accent-primary)' }}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+    <div className="max-w-xl mx-auto px-4 pt-16 pb-8 animate-fadeIn">
+      {/* Hero Icon */}
+      <div className="flex justify-center mb-8">
+        <div 
+          className="w-16 h-16 rounded-2xl flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)' }}
         >
-          <path
-            strokeLinecap="round"
+          <svg 
+            className="w-8 h-8"
+            style={{ color: 'var(--accent-blue)' }}
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="1.5"
+            strokeLinecap="round" 
             strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-          />
-        </svg>
+          >
+            {/* Sparkle/star icon */}
+            <path d="M12 3v2m0 14v2M3 12h2m14 0h2" />
+            <path d="M5.636 5.636l1.414 1.414m9.9 9.9l1.414 1.414M5.636 18.364l1.414-1.414m9.9-9.9l1.414-1.414" />
+            <circle cx="12" cy="12" r="4" />
+          </svg>
+        </div>
       </div>
 
-      {/* Heading */}
-      <h1
-        className="text-3xl font-semibold text-center mb-3"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        Ask anything about science
-      </h1>
+      {/* Hero Text */}
+      <div className="text-center mb-12">
+        <h1 
+          className="text-3xl font-semibold mb-4"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          Ask anything about science
+        </h1>
+        <p 
+          className="text-base leading-relaxed max-w-md mx-auto"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          Explore research across millions of papers.
+          <br />
+          Get synthesized answers with citations.
+        </p>
+      </div>
 
-      {/* Subtext */}
-      <p
-        className="text-center max-w-md mb-8 leading-relaxed"
-        style={{ color: 'var(--text-secondary)' }}
+      {/* Try asking label */}
+      <p 
+        className="text-sm text-center mb-4"
+        style={{ color: 'var(--text-tertiary)' }}
       >
-        Explore research across millions of papers.
-        <br />
-        Get synthesized answers with citations.
+        Try asking:
       </p>
 
-      {/* Example queries */}
-      <div className="w-full max-w-lg">
-        <p
-          className="text-sm mb-3 text-center"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          Try asking:
-        </p>
-        <div className="space-y-2">
-          {exampleQueries.map((query, i) => (
-            <button
-              key={i}
-              onClick={() => onExampleClick(query)}
-              className="w-full text-left px-4 py-3 rounded-lg transition-colors text-sm"
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-light)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
+      {/* Example Query Cards */}
+      <div className="space-y-3">
+        {EXAMPLE_QUERIES.map((query, index) => (
+          <button
+            key={index}
+            onClick={() => onExampleClick(query)}
+            className="w-full text-left p-4 rounded-xl border transition-all duration-200 group"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderColor: 'var(--border-light)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-medium)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-light)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <span 
+              className="text-sm transition-colors duration-200"
+              style={{ color: 'var(--text-secondary)' }}
             >
-              <span className="mr-2" style={{ color: 'var(--accent-primary)' }}>→</span>
               {query}
-            </button>
-          ))}
-        </div>
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );

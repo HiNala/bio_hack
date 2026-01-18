@@ -2,32 +2,26 @@
 
 interface UserMessageProps {
   content: string;
-  timestamp?: Date;
+  timestamp: Date;
 }
 
 export function UserMessage({ content, timestamp }: UserMessageProps) {
   return (
-    <div className="flex justify-end mb-4 animate-fadeIn">
+    <div className="flex justify-end animate-fadeIn">
       <div
-        className="max-w-[80%] px-4 py-3 rounded-2xl rounded-br-sm"
+        className="max-w-md px-4 py-3 rounded-2xl rounded-br-md"
         style={{
-          backgroundColor: 'var(--bg-tertiary)',
+          backgroundColor: 'var(--accent-blue)',
+          color: 'white',
         }}
       >
-        <p
-          className="text-base leading-relaxed whitespace-pre-wrap"
-          style={{ color: 'var(--text-primary)' }}
+        <p className="text-[15px] leading-relaxed">{content}</p>
+        <p 
+          className="text-xs mt-2 text-right"
+          style={{ opacity: 0.7 }}
         >
-          {content}
+          {timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
         </p>
-        {timestamp && (
-          <p
-            className="text-xs mt-1 text-right"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </p>
-        )}
       </div>
     </div>
   );

@@ -1,22 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
 export interface LiveStats {
   totalPapers: number;
   totalChunks: number;
   embeddedChunks: number;
-  embeddedPapers: number;
   avgTokensPerChunk: number;
-  papersWithAbstracts: number;
-  chunkedPapers: number;
-  searchableChunks: number;
-  searchablePapers: number;
-  embeddingModel: string;
-  embeddingDimensions: number;
   recentQueries: number;
   processingStatus: 'idle' | 'searching' | 'processing' | 'embedding' | 'ready';
   lastUpdate: Date | null;
+  // Extended stats
+  papersWithAbstracts?: number;
+  chunkedPapers?: number;
+  embeddedPapers?: number;
+  embeddingModel?: string;
+  searchableChunks?: number;
   // Current search stats
   currentSearch?: {
     openalexCount: number;
@@ -36,408 +33,218 @@ interface LiveStatsSidebarProps {
 }
 
 export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
-  const [pulse, setPulse] = useState(false);
-
-  // Pulse animation when stats update
-  useEffect(() => {
-    setPulse(true);
-    const timer = setTimeout(() => setPulse(false), 500);
-    return () => clearTimeout(timer);
-  }, [stats.totalPapers, stats.totalChunks]);
-
-  const getStatusColor = (status: LiveStats['processingStatus']) => {
-    switch (status) {
-      case 'searching': return 'var(--accent-primary)';
-      case 'processing': return 'var(--accent-warning)';
-      case 'embedding': return 'var(--accent-success)';
-      case 'ready': return 'var(--accent-success)';
-      default: return 'var(--text-muted)';
-    }
-  };
-
-  const getStatusLabel = (status: LiveStats['processingStatus']) => {
-    switch (status) {
-      case 'searching': return 'Searching APIs...';
-      case 'processing': return 'Processing papers...';
-      case 'embedding': return 'Creating embeddings...';
-      case 'ready': return 'Ready';
-      default: return 'Idle';
-    }
-  };
-
   if (!isOpen) return null;
 
-  const embeddedPercent = stats.totalChunks > 0
-    ? Math.round((stats.embeddedChunks / stats.totalChunks) * 100)
+  const embeddingPercent = stats.totalChunks > 0 
+    ? Math.round((stats.embeddedChunks / stats.totalChunks) * 100) 
     : 0;
 
   return (
-    <div
-      className="fixed right-0 top-0 h-full w-80 border-l overflow-y-auto z-40 transition-transform shadow-lg"
+    <aside
+      className="fixed right-0 top-16 bottom-0 w-80 z-40 overflow-hidden flex flex-col"
       style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderColor: 'var(--border-light)',
+        backgroundColor: 'var(--bg-card)',
+        borderLeft: '1px solid var(--border-subtle)',
+        boxShadow: 'var(--shadow-sidebar)',
       }}
     >
-      {/* Header */}
-      <div
-        className="sticky top-0 p-4 border-b backdrop-blur"
-        style={{
-          backgroundColor: 'rgba(250, 250, 249, 0.9)',
-          borderColor: 'var(--border-light)',
-        }}
-      >
-        <h2
-          className="text-lg font-semibold flex items-center gap-2"
-          style={{ color: 'var(--text-primary)' }}
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
-          Live Stats
-        </h2>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
         
-        {/* Status indicator */}
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${stats.processingStatus !== 'idle' ? 'animate-pulse' : ''}`}
-              style={{ backgroundColor: getStatusColor(stats.processingStatus) }}
-            />
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {getStatusLabel(stats.processingStatus)}
-            </span>
-          </div>
-          {stats.lastUpdate && (
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {stats.lastUpdate.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Stats content */}
-      <div className="p-4 space-y-6">
-        {/* Current search stats (when active) */}
-        {stats.currentSearch && stats.processingStatus !== 'idle' && (
-          <div
-            className="p-4 rounded-xl animate-fadeIn"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--border-light)',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <h3
-              className="text-sm font-medium mb-3 flex items-center gap-2"
-              style={{ color: 'var(--text-primary)' }}
+        {/* STATUS Section */}
+        <section>
+          <SectionHeader title="STATUS" />
+          <StatusIndicator status={stats.processingStatus} />
+          
+          {/* Active search progress */}
+          {stats.currentSearch && stats.processingStatus !== 'idle' && (
+            <div 
+              className="mt-4 p-4 rounded-xl animate-fadeIn"
+              style={{ backgroundColor: 'var(--bg-page)' }}
             >
-              <span>Current Search</span>
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-                live
-              </span>
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <StatItem
-                label="OpenAlex"
-                value={stats.currentSearch.openalexCount}
-                suffix="papers"
-                pulse={pulse}
-              />
-              <StatItem
-                label="Semantic Scholar"
-                value={stats.currentSearch.semanticScholarCount}
-                suffix="papers"
-                pulse={pulse}
-              />
-              <StatItem
-                label="New Papers"
-                value={stats.currentSearch.newPapers}
-                highlight
-                pulse={pulse}
-              />
-              <StatItem
-                label="Chunks Created"
-                value={stats.currentSearch.chunksCreated}
-                highlight
-                pulse={pulse}
-              />
-              {typeof stats.currentSearch.duplicatesRemoved === 'number' && (
-                <StatItem
-                  label="Duplicates"
-                  value={stats.currentSearch.duplicatesRemoved}
-                  pulse={pulse}
-                />
-              )}
-              {typeof stats.currentSearch.embeddingsTotal === 'number' && (
-                <StatItem
-                  label="Embeddings"
-                  value={stats.currentSearch.embeddingsCompleted || 0}
-                  suffix={`/${stats.currentSearch.embeddingsTotal}`}
-                  highlight
-                  pulse={pulse}
-                />
-              )}
-            </div>
-            {typeof stats.currentSearch.elapsedMs === 'number' && (
-              <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-                Elapsed: {(stats.currentSearch.elapsedMs / 1000).toFixed(1)}s
-              </p>
-            )}
-            {typeof stats.currentSearch.embeddingsTotal === 'number' && stats.currentSearch.embeddingsTotal > 0 && (
-              <div className="mt-3">
-                <div
-                  className="h-2 rounded-full overflow-hidden"
-                  style={{ backgroundColor: 'var(--border-light)' }}
-                >
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        Math.round(
-                          ((stats.currentSearch.embeddingsCompleted || 0) / stats.currentSearch.embeddingsTotal) * 100
-                        )
-                      )}%`,
-                      backgroundColor: 'var(--accent-primary)',
-                    }}
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="OpenAlex" value={stats.currentSearch.openalexCount} />
+                <MiniStat label="Semantic Scholar" value={stats.currentSearch.semanticScholarCount} />
+                <MiniStat label="New Papers" value={stats.currentSearch.newPapers} highlight />
+                <MiniStat label="Chunks" value={stats.currentSearch.chunksCreated} highlight />
+              </div>
+              
+              {typeof stats.currentSearch.embeddingsTotal === 'number' && stats.currentSearch.embeddingsTotal > 0 && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span style={{ color: 'var(--text-tertiary)' }}>Embedding progress</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      {stats.currentSearch.embeddingsCompleted || 0}/{stats.currentSearch.embeddingsTotal}
+                    </span>
+                  </div>
+                  <ProgressBar 
+                    percent={Math.round(((stats.currentSearch.embeddingsCompleted || 0) / stats.currentSearch.embeddingsTotal) * 100)} 
                   />
                 </div>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Embeddings {stats.currentSearch.embeddingsCompleted || 0}/{stats.currentSearch.embeddingsTotal}
+              )}
+              
+              {typeof stats.currentSearch.elapsedMs === 'number' && (
+                <p className="text-xs mt-3" style={{ color: 'var(--text-tertiary)' }}>
+                  Elapsed: {(stats.currentSearch.elapsedMs / 1000).toFixed(1)}s
                 </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Database stats */}
-        <div>
-          <h3
-            className="text-sm font-medium mb-3 flex items-center gap-2"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-              />
-            </svg>
-            Database
-          </h3>
-          <div
-            className="p-4 rounded-xl space-y-3"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--border-light)',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <StatRow
-              label="Total Papers"
-              value={stats.totalPapers.toLocaleString()}
-              icon={
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              }
-              pulse={pulse}
-            />
-            <StatRow
-              label="Total Chunks"
-              value={stats.totalChunks.toLocaleString()}
-              icon={
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                  />
-                </svg>
-              }
-              pulse={pulse}
-            />
-            <StatRow
-              label="Embedded"
-              value={`${stats.embeddedChunks.toLocaleString()} / ${stats.totalChunks.toLocaleString()}`}
-              progress={(stats.totalChunks > 0 ? (stats.embeddedChunks / stats.totalChunks) * 100 : 0)}
-              pulse={pulse}
-            />
-            <StatRow
-              label="Avg Tokens/Chunk"
-              value={stats.avgTokensPerChunk.toFixed(0)}
-              pulse={pulse}
-            />
-            <StatRow
-              label="Papers w/ Abstracts"
-              value={stats.papersWithAbstracts.toLocaleString()}
-              pulse={pulse}
-            />
-            <StatRow
-              label="Chunked Papers"
-              value={stats.chunkedPapers.toLocaleString()}
-              pulse={pulse}
-            />
-            <StatRow
-              label="Embedded Papers"
-              value={stats.embeddedPapers.toLocaleString()}
-              pulse={pulse}
-            />
-          </div>
-        </div>
-
-        {/* Search index */}
-        <div>
-          <h3
-            className="text-sm font-medium mb-3"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Search Index
-          </h3>
-          <div
-            className="p-4 rounded-xl space-y-2"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--border-light)',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <StatRow
-              label="Searchable Chunks"
-              value={stats.searchableChunks.toLocaleString()}
-            />
-            <StatRow
-              label="Searchable Papers"
-              value={stats.searchablePapers.toLocaleString()}
-            />
-            <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <p>Vector similarity ready • {embeddedPercent}% embedded</p>
+              )}
             </div>
-          </div>
-        </div>
+          )}
+        </section>
 
-        {/* Models */}
-        <div>
-          <h3
-            className="text-sm font-medium mb-3"
+        {/* DATABASE Section */}
+        <section>
+          <SectionHeader title="DATABASE" />
+          <div className="space-y-5">
+            <StatCard label="Total Papers" value={stats.totalPapers} />
+            <StatCard label="Total Chunks" value={stats.totalChunks} />
+            <div>
+              <StatCard label="Embeddings" value={`${stats.embeddedChunks} / ${stats.totalChunks}`} />
+              <div className="mt-2">
+                <ProgressBar percent={embeddingPercent} />
+              </div>
+            </div>
+            <StatCard label="Avg Tokens/Chunk" value={Math.round(stats.avgTokensPerChunk)} />
+          </div>
+        </section>
+
+        {/* HOW IT WORKS Section */}
+        <section>
+          <SectionHeader title="HOW IT WORKS" />
+          <p 
+            className="text-sm leading-relaxed"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Models
-          </h3>
-          <div
-            className="p-4 rounded-xl space-y-2"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--border-light)',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <StatRow
-              label="Embedding Model"
-              value={stats.embeddingModel}
-            />
-            <StatRow
-              label="Dimensions"
-              value={stats.embeddingDimensions.toLocaleString()}
-            />
-          </div>
-        </div>
+            Papers are fetched from OpenAlex & Semantic Scholar, chunked for semantic search, then embedded using AI for similarity matching.
+          </p>
+        </section>
       </div>
-    </div>
-  );
-}
 
-function StatItem({
-  label,
-  value,
-  suffix,
-  highlight,
-  pulse,
-}: {
-  label: string;
-  value: number;
-  suffix?: string;
-  highlight?: boolean;
-  pulse?: boolean;
-}) {
-  return (
-    <div className={pulse ? 'animate-pulse' : ''}>
-      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </p>
-      <p
-        className="text-lg font-semibold"
-        style={{ color: highlight ? 'var(--accent-primary)' : 'var(--text-primary)' }}
-      >
-        {value.toLocaleString()}
-        {suffix && (
-          <span className="text-xs font-normal ml-1" style={{ color: 'var(--text-muted)' }}>
-            {suffix}
-          </span>
-        )}
-      </p>
-    </div>
-  );
-}
-
-function StatRow({
-  label,
-  value,
-  icon,
-  progress,
-  pulse,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-  progress?: number;
-  pulse?: boolean;
-}) {
-  return (
-    <div className={pulse ? 'animate-pulse' : ''}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {icon && (
-            <span style={{ color: 'var(--text-tertiary)' }}>{icon}</span>
-          )}
-          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {label}
-          </span>
-        </div>
-        <span
-          className="text-sm font-medium"
-          style={{ color: 'var(--text-primary)' }}
+      {/* Footer with timestamp */}
+      {stats.lastUpdate && (
+        <div 
+          className="px-6 py-4 border-t"
+          style={{ borderColor: 'var(--border-subtle)' }}
         >
-          {value}
-        </span>
-      </div>
-      {progress !== undefined && (
-        <div
-          className="mt-1 h-1.5 rounded-full overflow-hidden"
-          style={{ backgroundColor: 'var(--border-light)' }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${progress}%`,
-              backgroundColor: progress > 0 ? 'var(--accent-success)' : 'var(--border-medium)',
-            }}
-          />
+          <p className="text-xs text-center" style={{ color: 'var(--text-tertiary)' }}>
+            Updated: {stats.lastUpdate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+          </p>
         </div>
       )}
+    </aside>
+  );
+}
+
+// Section header component
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <h3 
+      className="text-xs font-semibold uppercase tracking-wider mb-4"
+      style={{ color: 'var(--text-tertiary)' }}
+    >
+      {title}
+    </h3>
+  );
+}
+
+// Status indicator component
+function StatusIndicator({ status }: { status: LiveStats['processingStatus'] }) {
+  const config = {
+    idle: { 
+      color: 'var(--text-tertiary)', 
+      label: 'Idle', 
+      sublabel: 'Ready to process queries',
+      animated: false 
+    },
+    searching: { 
+      color: 'var(--accent-blue)', 
+      label: 'Searching', 
+      sublabel: 'Fetching from APIs...',
+      animated: true 
+    },
+    processing: { 
+      color: 'var(--accent-purple)', 
+      label: 'Processing', 
+      sublabel: 'Analyzing papers...',
+      animated: true 
+    },
+    embedding: { 
+      color: 'var(--accent-purple)', 
+      label: 'Embedding', 
+      sublabel: 'Creating vectors...',
+      animated: true 
+    },
+    ready: { 
+      color: 'var(--accent-green)', 
+      label: 'Complete', 
+      sublabel: 'Results ready',
+      animated: false 
+    },
+  };
+
+  const { color, label, sublabel, animated } = config[status];
+
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${animated ? 'status-dot-animated' : ''}`}
+        style={{ backgroundColor: color }}
+      />
+      <div>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {label}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          {sublabel}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Stat card component
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <p className="text-sm mb-1" style={{ color: 'var(--text-tertiary)' }}>
+        {label}
+      </p>
+      <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
+    </div>
+  );
+}
+
+// Mini stat for current search
+function MiniStat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{label}</p>
+      <p 
+        className="text-lg font-semibold"
+        style={{ color: highlight ? 'var(--accent-blue)' : 'var(--text-primary)' }}
+      >
+        {value.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
+// Progress bar component
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <div
+      className="h-1.5 rounded-full overflow-hidden"
+      style={{ backgroundColor: 'var(--border-light)' }}
+    >
+      <div
+        className="h-full rounded-full transition-all duration-500"
+        style={{
+          width: `${percent}%`,
+          backgroundColor: 'var(--accent-blue)',
+        }}
+      />
     </div>
   );
 }

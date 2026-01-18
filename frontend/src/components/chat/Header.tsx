@@ -3,107 +3,81 @@
 interface HeaderProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
-  onToggleSettings?: () => void;
+  onToggleSettings: () => void;
 }
 
-export function Header({ onToggleSidebar, isSidebarOpen, onToggleSettings }: HeaderProps) {
+export function Header({ onToggleSettings }: HeaderProps) {
   return (
-    <header
-      className="fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50"
+    <header 
+      className="fixed top-0 left-0 right-0 h-16 z-50 border-b"
       style={{
-        backgroundColor: 'var(--bg-primary)',
-        borderBottom: '1px solid var(--border-light)',
+        backgroundColor: 'var(--bg-page)',
+        borderColor: 'var(--border-subtle)',
       }}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ backgroundColor: 'var(--bg-pill)' }}
-        >
-          <svg
-            className="w-5 h-5"
-            style={{ color: 'var(--text-inverse)' }}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
+      <div className="h-full max-w-screen-2xl mx-auto px-6 flex items-center justify-between">
+        {/* Logo */}
+        <div className="flex items-center gap-2.5">
+          <div 
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: 'var(--accent-blue)', opacity: 0.9 }}
           >
-            <path
-              strokeLinecap="round"
+            <svg 
+              className="w-4.5 h-4.5 text-white" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+              strokeLinecap="round" 
               strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-            />
-          </svg>
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+              <path d="m4.93 4.93 2.83 2.83m8.48 8.48 2.83 2.83M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83" />
+            </svg>
+          </div>
+          <span 
+            className="text-lg font-semibold"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            ScienceRAG
+          </span>
         </div>
-        <span
-          className="text-lg font-semibold"
-          style={{ color: 'var(--text-primary)' }}
-        >
-          ScienceRAG
-        </span>
-      </div>
-
-      {/* Right side */}
-      <div className="flex items-center gap-3">
-        {/* Stats toggle */}
-        <button
-          onClick={onToggleSidebar}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors"
-          style={{
-            backgroundColor: isSidebarOpen ? 'var(--bg-tertiary)' : 'transparent',
-            color: 'var(--text-secondary)',
-          }}
-          onMouseEnter={(e) => {
-            if (!isSidebarOpen) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-          }}
-          onMouseLeave={(e) => {
-            if (!isSidebarOpen) e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
-          Stats
-        </button>
 
         {/* Settings button */}
-        {onToggleSettings && (
-          <button
-            onClick={onToggleSettings}
-            className="p-2 rounded-full transition-colors"
-            style={{ color: 'var(--text-tertiary)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = 'var(--text-tertiary)';
-            }}
-            title="Settings"
+        <button
+          onClick={onToggleSettings}
+          className="p-2.5 rounded-lg transition-all duration-200"
+          style={{ color: 'var(--text-tertiary)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--border-subtle)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
+          aria-label="Settings"
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+            strokeWidth="1.5"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
-        )}
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" 
+            />
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" 
+            />
+          </svg>
+        </button>
       </div>
     </header>
   );

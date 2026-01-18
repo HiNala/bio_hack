@@ -27,34 +27,55 @@ function Toast({ toast, onDismiss }: ToastProps) {
     }
   }, [toast, onDismiss]);
 
-  const getColors = () => {
-    switch (toast.type) {
-      case 'success':
-        return { bg: 'var(--accent-success)', icon: '✓' };
-      case 'error':
-        return { bg: 'var(--accent-error)', icon: '✕' };
-      case 'warning':
-        return { bg: 'var(--accent-warning)', icon: '!' };
-      case 'info':
-      default:
-        return { bg: 'var(--accent-primary)', icon: 'i' };
-    }
+  const config = {
+    success: { 
+      bg: 'var(--accent-green)', 
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )
+    },
+    error: { 
+      bg: 'var(--accent-red)', 
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )
+    },
+    warning: { 
+      bg: '#F59E0B', 
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      )
+    },
+    info: { 
+      bg: 'var(--accent-blue)', 
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    },
   };
 
-  const { bg, icon } = getColors();
+  const { bg, icon } = config[toast.type];
 
   return (
     <div
-      className="flex items-start gap-3 p-4 rounded-lg animate-slideUp max-w-sm"
+      className="flex items-start gap-3 p-4 rounded-xl animate-slideUp max-w-sm"
       style={{
-        backgroundColor: 'var(--bg-primary)',
+        backgroundColor: 'var(--bg-card)',
         boxShadow: 'var(--shadow-lg)',
-        border: '1px solid var(--border-light)',
+        border: '1px solid var(--border-subtle)',
       }}
     >
       {/* Icon */}
       <div
-        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white"
         style={{ backgroundColor: bg }}
       >
         {icon}
@@ -71,7 +92,7 @@ function Toast({ toast, onDismiss }: ToastProps) {
         {toast.message && (
           <p
             className="text-xs mt-1"
-            style={{ color: 'var(--text-muted)' }}
+            style={{ color: 'var(--text-secondary)' }}
           >
             {toast.message}
           </p>
@@ -81,17 +102,17 @@ function Toast({ toast, onDismiss }: ToastProps) {
       {/* Dismiss button */}
       <button
         onClick={() => onDismiss(toast.id)}
-        className="flex-shrink-0 p-1 rounded transition-colors"
+        className="flex-shrink-0 p-1 rounded-lg transition-colors"
         style={{ color: 'var(--text-tertiary)' }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+          e.currentTarget.style.backgroundColor = 'var(--border-subtle)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.backgroundColor = 'transparent';
         }}
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
     </div>
@@ -107,7 +128,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-20 right-4 z-[200] space-y-2">
+    <div className="fixed top-20 right-6 z-[200] space-y-3">
       {toasts.map((toast) => (
         <Toast key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}

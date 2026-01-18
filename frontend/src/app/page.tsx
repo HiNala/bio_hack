@@ -35,7 +35,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [currentQuery, setCurrentQuery] = useState<string>('');
@@ -43,14 +43,7 @@ export default function Home() {
     totalPapers: 0,
     totalChunks: 0,
     embeddedChunks: 0,
-    embeddedPapers: 0,
     avgTokensPerChunk: 0,
-    papersWithAbstracts: 0,
-    chunkedPapers: 0,
-    searchableChunks: 0,
-    searchablePapers: 0,
-    embeddingModel: 'text-embedding-3-small',
-    embeddingDimensions: 1536,
     recentQueries: 0,
     processingStatus: 'idle',
     lastUpdate: null,
@@ -65,12 +58,10 @@ export default function Home() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + K to focus input
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         inputRef.current?.focus();
       }
-      // Escape to close settings
       if (e.key === 'Escape' && isSettingsOpen) {
         setIsSettingsOpen(false);
       }
@@ -83,26 +74,17 @@ export default function Home() {
   // Fetch stats
   const fetchStats = useCallback(async () => {
     try {
-      const [chunkStats, docStats, embedStats, searchStats] = await Promise.all([
+      const [chunkStats, docResponse] = await Promise.all([
         api.getChunkingStats(),
-        api.getDocumentStats(),
-        api.getEmbeddingStats(),
-        api.getSearchStats(),
+        api.getDocuments(undefined, 1, 1),
       ]);
 
       setLiveStats(prev => ({
         ...prev,
-        totalPapers: docStats.total_papers,
-        papersWithAbstracts: docStats.papers_with_abstracts,
-        chunkedPapers: docStats.chunked_papers,
+        totalPapers: docResponse.total,
         totalChunks: chunkStats.total_chunks,
         embeddedChunks: chunkStats.embedded_chunks,
         avgTokensPerChunk: chunkStats.avg_tokens_per_chunk,
-        embeddedPapers: embedStats.embedded_papers,
-        embeddingModel: embedStats.embedding_model,
-        embeddingDimensions: embedStats.dimensions,
-        searchableChunks: searchStats.searchable_chunks,
-        searchablePapers: searchStats.searchable_papers,
         lastUpdate: new Date(),
       }));
     } catch (err) {
@@ -136,12 +118,11 @@ export default function Home() {
 
       setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'completed' } : s));
 
-      // Format the RAG response into a readable message
       let content = ragResponse.summary || '';
       
       if (ragResponse.key_findings && ragResponse.key_findings.length > 0) {
         content += '\n\n**Key Findings:**\n';
-        ragResponse.key_findings.forEach((finding, i) => {
+        ragResponse.key_findings.forEach((finding) => {
           content += `• ${finding}\n`;
         });
       }
@@ -160,7 +141,6 @@ export default function Home() {
         });
       }
 
-      // Update sources with RAG citations
       const ragSources: Source[] = ragResponse.citations.map((citation, idx) => ({
         citationId: idx + 1,
         paperId: citation.paper_id,
@@ -187,7 +167,6 @@ export default function Home() {
       console.error('RAG synthesis failed:', err);
       setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'error' } : s));
       
-      // Return a fallback message with just the sources
       return {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -201,7 +180,6 @@ export default function Home() {
 
   // Process a query
   const handleSubmit = async (query: string) => {
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
@@ -211,9 +189,8 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage]);
     setCurrentQuery(query);
 
-    // Start loading
     setIsLoading(true);
-    setCurrentMessage('Starting ingestion job...');
+    setCurrentMessage('Starting search...');
     setProgressSteps([
       { id: 'parsing', label: 'Parsing query', status: 'active' },
       { id: 'fetching', label: 'Fetching papers', status: 'pending' },
@@ -234,7 +211,6 @@ export default function Home() {
     }));
 
     try {
-      // Get settings from localStorage
       const savedSettings = localStorage.getItem('sciencerag-settings');
       const settings = savedSettings ? JSON.parse(savedSettings) : { papersPerQuery: 30, openalexEnabled: true, semanticScholarEnabled: true };
       const sources: string[] = [];
@@ -248,15 +224,13 @@ export default function Home() {
       });
 
       setCurrentJobId(startResponse.job_id);
-      setCurrentMessage('Ingestion job started...');
+      setCurrentMessage('Searching literature databases...');
       setLiveStats(prev => ({ ...prev, processingStatus: 'searching' }));
     } catch (err) {
       console.error('Error processing query:', err);
       
-      // Show error toast
       showError('Search failed', err instanceof Error ? err.message : 'Unknown error occurred');
 
-      // Add error message
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -282,9 +256,8 @@ export default function Home() {
     const pollJob = async () => {
       try {
         const status: IngestJobStatusResponse = await api.getIngestJobStatus(currentJobId);
-        setCurrentMessage(`Stage: ${status.status}`);
+        setCurrentMessage(`${status.status.charAt(0).toUpperCase() + status.status.slice(1)}...`);
 
-        // Map to progress steps
         if (status.progress?.stages) {
           setProgressSteps([
             { id: 'parsing', label: 'Parsing query', status: mapStage(status.progress.stages.parsing?.status) },
@@ -295,7 +268,6 @@ export default function Home() {
           ]);
         }
 
-        // Update live stats
         const progress = status.progress;
         if (progress) {
           setLiveStats(prev => ({
@@ -320,7 +292,6 @@ export default function Home() {
           }
 
           if (status.status === 'completed') {
-            // Fetch papers for sources
             const papersResponse = await api.getIngestJobPapers(currentJobId, 10, 0);
             const sources: Source[] = papersResponse.papers.map((paper, index) => ({
               citationId: index + 1,
@@ -333,7 +304,6 @@ export default function Home() {
               url: paper.url || null,
             }));
 
-            // Now run RAG synthesis
             showInfo('Papers ingested', `Found ${progress?.papers.papers_stored || 0} papers. Synthesizing answer...`);
             
             const assistantMessage = await generateRAGSynthesis(currentQuery, sources);
@@ -358,7 +328,7 @@ export default function Home() {
           setCurrentJobId(null);
           setCurrentQuery('');
           setLiveStats(prev => ({ ...prev, processingStatus: 'idle', currentSearch: undefined }));
-          fetchStats(); // Refresh stats after completion
+          fetchStats();
         }
       } catch (err) {
         console.error('Polling failed:', err);
@@ -373,14 +343,11 @@ export default function Home() {
     };
   }, [currentJobId, currentQuery, generateRAGSynthesis, showError, showSuccess, showInfo, fetchStats]);
 
-  // Handle example query click
   const handleExampleClick = (query: string) => {
     handleSubmit(query);
   };
 
-  // Handle source click - scroll to source and open link
   const handleSourceClick = (source: Source) => {
-    // First, scroll to the source in the conversation
     const sourceElement = document.getElementById(`source-${source.citationId}`);
     if (sourceElement) {
       sourceElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -390,7 +357,6 @@ export default function Home() {
       }, 2000);
     }
     
-    // Open the paper link
     if (source.url) {
       window.open(source.url, '_blank');
     } else if (source.doi) {
@@ -398,7 +364,6 @@ export default function Home() {
     }
   };
 
-  // Toggle settings
   const handleToggleSettings = () => {
     setIsSettingsOpen(!isSettingsOpen);
   };
@@ -406,13 +371,13 @@ export default function Home() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
       <Header
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onToggleSidebar={() => {}}
         isSidebarOpen={isSidebarOpen}
         onToggleSettings={handleToggleSettings}
       />
@@ -425,20 +390,20 @@ export default function Home() {
 
       {/* Main content area */}
       <main
-        className="pt-16 pb-32 transition-all duration-300"
+        className="pt-16 pb-40 transition-all duration-300"
         style={{
           marginRight: isSidebarOpen ? '320px' : '0',
         }}
       >
         <div
           ref={conversationRef}
-          className="max-w-3xl mx-auto px-4 py-8 overflow-y-auto"
-          style={{ maxHeight: 'calc(100vh - 180px)' }}
+          className="max-w-2xl mx-auto px-6 py-8 overflow-y-auto"
+          style={{ maxHeight: 'calc(100vh - 200px)' }}
         >
           {!hasMessages && !isLoading ? (
             <EmptyState onExampleClick={handleExampleClick} />
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {messages.map((message) => (
                 message.type === 'user' ? (
                   <UserMessage

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 
 interface FloatingInputProps {
   onSubmit: (query: string) => void;
@@ -8,20 +8,14 @@ interface FloatingInputProps {
   placeholder?: string;
 }
 
-export interface FloatingInputRef {
-  focus: () => void;
-}
-
-export const FloatingInput = forwardRef<FloatingInputRef, FloatingInputProps>(
-  function FloatingInput({ onSubmit, isLoading = false, placeholder }, ref) {
+export const FloatingInput = forwardRef<{ focus: () => void }, FloatingInputProps>(
+  function FloatingInput({ onSubmit, isLoading = false, placeholder = "Ask a research question..." }, ref) {
     const [value, setValue] = useState('');
+    const [isFocused, setIsFocused] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    // Expose focus method to parent
     useImperativeHandle(ref, () => ({
-      focus: () => {
-        textareaRef.current?.focus();
-      },
+      focus: () => textareaRef.current?.focus(),
     }));
 
     // Auto-resize textarea
@@ -29,117 +23,152 @@ export const FloatingInput = forwardRef<FloatingInputRef, FloatingInputProps>(
       const textarea = textareaRef.current;
       if (textarea) {
         textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        const newHeight = Math.min(textarea.scrollHeight, 120); // Max 4 lines approx
+        textarea.style.height = `${newHeight}px`;
       }
     }, [value]);
 
     const handleSubmit = () => {
-      if (value.trim() && !isLoading) {
-        onSubmit(value.trim());
+      const trimmed = value.trim();
+      if (trimmed && !isLoading) {
+        onSubmit(trimmed);
         setValue('');
       }
     };
 
-    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
       }
     };
 
-    const canSubmit = value.trim().length > 0 && !isLoading;
-
     return (
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 pointer-events-none z-50">
-        <div className="max-w-2xl mx-auto pointer-events-auto">
-          <div
-            className="flex items-end gap-2 rounded-full px-4 py-2"
-            style={{
-              backgroundColor: 'var(--bg-pill)',
-              boxShadow: 'var(--shadow-pill)',
-            }}
-          >
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full px-6" style={{ maxWidth: '720px' }}>
+        {/* Main pill container */}
+        <div
+          className="relative transition-all duration-300"
+          style={{
+            backgroundColor: 'rgba(28, 28, 30, 0.95)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderRadius: 'var(--radius-pill)',
+            border: isFocused 
+              ? '1px solid rgba(255, 255, 255, 0.15)' 
+              : '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: isFocused
+              ? '0 8px 32px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(59, 130, 246, 0.1)'
+              : 'var(--shadow-pill)',
+          }}
+        >
+          <div className="flex items-center gap-3 px-5 py-3">
             {/* Search icon */}
-            <div className="flex-shrink-0 pb-2">
-              <svg
-                className="w-5 h-5"
-                style={{ color: 'var(--text-tertiary)' }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
+            <svg
+              className="w-5 h-5 flex-shrink-0 transition-colors duration-200"
+              style={{ color: isFocused ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)' }}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
 
-            {/* Text input */}
+            {/* Textarea */}
             <textarea
               ref={textareaRef}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder || "Ask a research question..."}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder={placeholder}
               disabled={isLoading}
               rows={1}
-              className="flex-1 bg-transparent border-none outline-none resize-none py-2 text-base leading-normal"
+              className="flex-1 bg-transparent text-white placeholder-zinc-500 resize-none outline-none text-[15px] leading-relaxed scrollbar-hide"
               style={{
-                color: 'var(--text-inverse)',
                 minHeight: '24px',
                 maxHeight: '120px',
               }}
             />
 
-            {/* Keyboard hint */}
-            <div className="flex-shrink-0 pb-2 hidden sm:block">
-              <kbd
-                className="px-1.5 py-0.5 text-xs rounded"
+            {/* Orb indicator */}
+            <div className="flex items-center gap-2">
+              <OrbIndicator isActive={isLoading} isFocused={isFocused} />
+              
+              {/* Submit button */}
+              <button
+                onClick={handleSubmit}
+                disabled={!value.trim() || isLoading}
+                className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0"
                 style={{
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  color: 'var(--text-tertiary)',
+                  backgroundColor: value.trim() && !isLoading 
+                    ? 'var(--accent-blue)' 
+                    : 'rgba(255, 255, 255, 0.1)',
+                  cursor: value.trim() && !isLoading ? 'pointer' : 'default',
                 }}
               >
-                ⌘K
-              </kbd>
+                {isLoading ? (
+                  <svg className="w-4 h-4 text-white animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.25" />
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-4 h-4"
+                    style={{ color: value.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)' }}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                  </svg>
+                )}
+              </button>
             </div>
-
-            {/* Submit button */}
-            <button
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all mb-0.5"
-              style={{
-                backgroundColor: canSubmit ? 'var(--accent-primary)' : 'var(--text-tertiary)',
-                opacity: canSubmit ? 1 : 0.5,
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {isLoading ? (
-                <svg className="w-4 h-4 animate-spin" style={{ color: 'white' }} fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" style={{ color: 'white' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
-              )}
-            </button>
           </div>
-
-          {/* Hint text */}
-          <p
-            className="text-center mt-2 text-xs"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            Press Enter to send, Shift+Enter for new line
-          </p>
         </div>
+
+        {/* Helper text */}
+        <p
+          className="text-center mt-3 text-xs transition-opacity duration-200"
+          style={{
+            color: 'var(--text-tertiary)',
+            opacity: isFocused ? 1 : 0.6,
+          }}
+        >
+          Press Enter to send, Shift+Enter for new line
+        </p>
       </div>
     );
   }
 );
+
+// Orb indicator component
+function OrbIndicator({ isActive, isFocused }: { isActive: boolean; isFocused: boolean }) {
+  return (
+    <div
+      className={`w-8 h-8 rounded-full flex-shrink-0 transition-all duration-500 ${
+        isActive ? 'animate-orb-active' : isFocused ? 'animate-orb-idle' : ''
+      }`}
+      style={{
+        background: isActive
+          ? 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 50%, #EC4899 100%)'
+          : isFocused
+          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.6) 0%, rgba(139, 92, 246, 0.6) 100%)'
+          : 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%)',
+        opacity: isActive ? 1 : isFocused ? 0.8 : 0.5,
+        boxShadow: isActive
+          ? '0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(139, 92, 246, 0.3)'
+          : isFocused
+          ? '0 0 12px rgba(59, 130, 246, 0.3)'
+          : 'none',
+      }}
+    />
+  );
+}
