@@ -1,12 +1,12 @@
 """
-Text Chunker
+Intelligent Text Chunker
 
-Intelligent text chunking with recursive splitting and overlap handling.
-Optimized for RAG retrieval of scientific literature.
+Sentence-aware text chunking with recursive splitting, overlap handling,
+and quality validation. Optimized for RAG retrieval of scientific literature.
 """
 
 import re
-from typing import Optional
+from typing import Optional, List, Tuple
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -26,6 +26,14 @@ class ChunkResult:
     char_count: int
     section: Optional[str] = None
     has_overlap: bool = False
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class ChunkValidation:
+    """Validation result for a chunk."""
+    is_valid: bool
+    issues: List[str] = field(default_factory=list)
 
 
 class TextChunker:
@@ -34,15 +42,30 @@ class TextChunker:
     
     Features:
     - Token-based size limits using tiktoken
+    - Sentence-aware splitting with abbreviation handling
     - Recursive splitting (paragraphs → sentences → words)
     - Overlap handling for context preservation
     - Section detection for abstracts vs body text
+    - Quality validation for chunks
     
     Parameters are configurable via app settings.
     """
     
+    # Common abbreviations to NOT split on
+    ABBREVIATIONS = {
+        "Dr", "Mr", "Mrs", "Ms", "Prof", "Jr", "Sr",
+        "Fig", "Figs", "Eq", "Eqs", "Ref", "Refs",
+        "et al", "i.e", "e.g", "vs", "cf", "etc",
+        "approx", "ca", "no", "vol", "pp",
+    }
+    
     # Sentence ending patterns
-    SENTENCE_ENDINGS = re.compile(r'(?<=[.!?])\s+(?=[A-Z])')
+    SENTENCE_ENDINGS = re.compile(
+        r'(?<=[.!?])'        # After sentence-ending punctuation
+        r'(?:\s*["\'])?'      # Optional closing quote
+        r'\s+'                # Whitespace
+        r'(?=[A-Z0-9\[\("])'  # Before capital letter, number, or opening bracket
+    )
     
     # Paragraph separators
     PARAGRAPH_SEP = re.compile(r'\n\s*\n')
@@ -50,11 +73,16 @@ class TextChunker:
     # Section headers (common in academic abstracts)
     SECTION_PATTERNS = {
         'background': re.compile(r'^(?:background|introduction|context)[:.]?\s*', re.I),
-        'methods': re.compile(r'^(?:methods?|methodology|approach)[:.]?\s*', re.I),
-        'results': re.compile(r'^(?:results?|findings)[:.]?\s*', re.I),
+        'methods': re.compile(r'^(?:methods?|methodology|approach|materials)[:.]?\s*', re.I),
+        'results': re.compile(r'^(?:results?|findings|observations)[:.]?\s*', re.I),
         'conclusion': re.compile(r'^(?:conclusions?|summary|discussion)[:.]?\s*', re.I),
-        'objective': re.compile(r'^(?:objectives?|aims?|purpose)[:.]?\s*', re.I),
+        'objective': re.compile(r'^(?:objectives?|aims?|purpose|goals?)[:.]?\s*', re.I),
     }
+    
+    # Quality thresholds
+    MIN_TOKENS = 20
+    MAX_TOKENS = 600
+    MIN_UNIQUE_WORDS_RATIO = 0.3
     
     def __init__(
         self,
@@ -75,14 +103,22 @@ class TextChunker:
         self.min_chunk_tokens = min_chunk_tokens
         
         # Initialize tiktoken encoder for token counting
-        # Use cl100k_base which is used by text-embedding-3-small
         self._encoder = self._get_encoder()
+        
+        # Build abbreviation pattern
+        self._abbrev_pattern = self._build_abbrev_pattern()
     
     @staticmethod
     @lru_cache(maxsize=1)
     def _get_encoder():
         """Get cached tiktoken encoder."""
         return tiktoken.get_encoding("cl100k_base")
+    
+    def _build_abbrev_pattern(self) -> re.Pattern:
+        """Build regex pattern for detecting abbreviations."""
+        escaped = [re.escape(abbr) for abbr in self.ABBREVIATIONS]
+        pattern = r'\b(' + '|'.join(escaped) + r')\.\s*$'
+        return re.compile(pattern, re.IGNORECASE)
     
     def count_tokens(self, text: str) -> int:
         """Count tokens in text using tiktoken."""
@@ -94,7 +130,8 @@ class TextChunker:
         self,
         text: str,
         section: Optional[str] = None,
-    ) -> list[ChunkResult]:
+        metadata: Optional[dict] = None,
+    ) -> List[ChunkResult]:
         """
         Chunk text into appropriately sized pieces.
         
@@ -102,13 +139,14 @@ class TextChunker:
         1. If text fits in target size, return as single chunk
         2. Split by paragraphs first
         3. If paragraph too large, split by sentences
-        4. If sentence too large, split by words
+        4. If sentence too large, split by clauses/words
         5. Merge small chunks to reach target size
         6. Add overlap from previous chunk
         
         Args:
             text: Text to chunk
             section: Optional section label (e.g., 'abstract')
+            metadata: Optional metadata to include with chunks
             
         Returns:
             List of ChunkResult objects
@@ -131,6 +169,7 @@ class TextChunker:
                 char_count=len(text),
                 section=section or self._detect_section(text),
                 has_overlap=False,
+                metadata=metadata or {},
             )]
         
         # Recursive splitting
@@ -146,6 +185,9 @@ class TextChunker:
         results = []
         for i, (chunk_text, has_overlap) in enumerate(final_chunks):
             detected_section = section or self._detect_section(chunk_text)
+            chunk_metadata = metadata.copy() if metadata else {}
+            chunk_metadata["chunk_position"] = f"{i+1}/{len(final_chunks)}"
+            
             results.append(ChunkResult(
                 text=chunk_text,
                 chunk_index=i,
@@ -153,6 +195,7 @@ class TextChunker:
                 char_count=len(chunk_text),
                 section=detected_section,
                 has_overlap=has_overlap,
+                metadata=chunk_metadata,
             ))
         
         return results
@@ -162,12 +205,9 @@ class TextChunker:
         title: str,
         abstract: Optional[str],
         full_text: Optional[str] = None,
-    ) -> list[ChunkResult]:
+    ) -> List[ChunkResult]:
         """
         Chunk a complete paper (title + abstract + optional full text).
-        
-        For now, we focus on abstracts since that's what we have from APIs.
-        Full text support can be added later.
         
         Args:
             title: Paper title
@@ -180,27 +220,76 @@ class TextChunker:
         all_chunks = []
         chunk_offset = 0
         
-        # Chunk abstract with title context
         if abstract:
             # Prepend title to first chunk for context
             abstract_with_context = f"Title: {title}\n\nAbstract: {abstract}"
-            abstract_chunks = self.chunk_text(abstract_with_context, section="abstract")
+            abstract_chunks = self.chunk_text(
+                abstract_with_context,
+                section="abstract",
+                metadata={"title": title},
+            )
             
-            # Update indices
             for chunk in abstract_chunks:
                 chunk.chunk_index = chunk_offset
                 chunk_offset += 1
                 all_chunks.append(chunk)
         
-        # Future: chunk full text sections
-        # if full_text:
-        #     body_chunks = self.chunk_text(full_text, section="body")
-        #     for chunk in body_chunks:
-        #         chunk.chunk_index = chunk_offset
-        #         chunk_offset += 1
-        #         all_chunks.append(chunk)
-        
         return all_chunks
+    
+    def validate_chunk(self, chunk: ChunkResult) -> ChunkValidation:
+        """
+        Validate chunk quality.
+        
+        Checks:
+        - Token count within bounds
+        - Not too repetitive
+        - Not garbage content
+        """
+        issues = []
+        
+        # Check length
+        if chunk.token_count < self.MIN_TOKENS:
+            issues.append(f"Too short: {chunk.token_count} tokens (min: {self.MIN_TOKENS})")
+        
+        if chunk.token_count > self.MAX_TOKENS:
+            issues.append(f"Too long: {chunk.token_count} tokens (max: {self.MAX_TOKENS})")
+        
+        # Check for repetitive content
+        words = chunk.text.lower().split()
+        if words:
+            unique_ratio = len(set(words)) / len(words)
+            if unique_ratio < self.MIN_UNIQUE_WORDS_RATIO:
+                issues.append(f"Too repetitive: {unique_ratio:.1%} unique words")
+        
+        # Check for garbage content
+        if self._is_garbage(chunk.text):
+            issues.append("Contains garbage/non-text content")
+        
+        return ChunkValidation(
+            is_valid=len(issues) == 0,
+            issues=issues,
+        )
+    
+    def _is_garbage(self, text: str) -> bool:
+        """Check if text appears to be garbage."""
+        if not text:
+            return True
+        
+        # Too many numbers (more than 50% digits)
+        digits = sum(c.isdigit() for c in text)
+        if digits / len(text) > 0.5:
+            return True
+        
+        # Too many special characters
+        special = sum(not c.isalnum() and not c.isspace() for c in text)
+        if special / len(text) > 0.3:
+            return True
+        
+        # Repeated patterns
+        if re.search(r'(.{10,})\1{2,}', text):
+            return True
+        
+        return False
     
     def _clean_text(self, text: str) -> str:
         """Clean text for chunking."""
@@ -212,14 +301,14 @@ class TextChunker:
         text = text.strip()
         return text
     
-    def _split_recursive(self, text: str) -> list[str]:
+    def _split_recursive(self, text: str) -> List[str]:
         """
         Recursively split text into chunks.
         
         Strategy:
         1. Try splitting by paragraphs
         2. If any paragraph too large, split by sentences
-        3. If any sentence too large, split by words
+        3. If any sentence too large, split by clauses/words
         """
         chunks = []
         
@@ -242,30 +331,110 @@ class TextChunker:
         
         return chunks
     
-    def _split_by_sentences(self, text: str) -> list[str]:
-        """Split text by sentences, handling oversized sentences."""
-        chunks = []
+    def _split_by_sentences(self, text: str) -> List[str]:
+        """
+        Split text by sentences, handling abbreviations and edge cases.
+        """
+        # First, protect abbreviations
+        protected_text = self._protect_abbreviations(text)
         
         # Split by sentence endings
-        sentences = self.SENTENCE_ENDINGS.split(text)
+        sentences = self.SENTENCE_ENDINGS.split(protected_text)
         
+        chunks = []
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
                 continue
+            
+            # Restore abbreviations
+            sentence = self._restore_abbreviations(sentence)
             
             sent_tokens = self.count_tokens(sentence)
             
             if sent_tokens <= self.target_tokens:
                 chunks.append(sentence)
             else:
-                # Sentence too large, split by words
-                word_chunks = self._split_by_words(sentence)
-                chunks.extend(word_chunks)
+                # Sentence too large, split by clauses or words
+                clause_chunks = self._split_long_sentence(sentence)
+                chunks.extend(clause_chunks)
         
         return chunks
     
-    def _split_by_words(self, text: str) -> list[str]:
+    def _protect_abbreviations(self, text: str) -> str:
+        """Replace periods after abbreviations with placeholder."""
+        for abbr in self.ABBREVIATIONS:
+            pattern = rf'\b{re.escape(abbr)}\.'
+            replacement = f'{abbr}[[PERIOD]]'
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        return text
+    
+    def _restore_abbreviations(self, text: str) -> str:
+        """Restore periods after abbreviations."""
+        return text.replace('[[PERIOD]]', '.')
+    
+    def _split_long_sentence(self, sentence: str) -> List[str]:
+        """
+        Split an overly long sentence into smaller pieces.
+        Try clause boundaries first, then word boundaries.
+        """
+        # Try splitting on semicolons and colons
+        parts = re.split(r'[;:]', sentence)
+        if len(parts) > 1:
+            result = []
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                if self.count_tokens(part) <= self.target_tokens:
+                    result.append(part)
+                else:
+                    result.extend(self._split_by_commas(part))
+            return result
+        
+        return self._split_by_commas(sentence)
+    
+    def _split_by_commas(self, text: str) -> List[str]:
+        """Split by commas (clause boundaries)."""
+        parts = text.split(',')
+        
+        if len(parts) <= 2:
+            return self._split_by_words(text)
+        
+        result = []
+        current = []
+        current_tokens = 0
+        
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            
+            part_tokens = self.count_tokens(part)
+            
+            if current_tokens + part_tokens <= self.target_tokens:
+                current.append(part)
+                current_tokens += part_tokens + 1  # +1 for comma
+            else:
+                if current:
+                    result.append(', '.join(current))
+                current = [part]
+                current_tokens = part_tokens
+        
+        if current:
+            result.append(', '.join(current))
+        
+        # If still too large, split by words
+        final_result = []
+        for chunk in result:
+            if self.count_tokens(chunk) > self.target_tokens:
+                final_result.extend(self._split_by_words(chunk))
+            else:
+                final_result.append(chunk)
+        
+        return final_result
+    
+    def _split_by_words(self, text: str) -> List[str]:
         """Split text by words when sentences are too long."""
         chunks = []
         words = text.split()
@@ -289,7 +458,7 @@ class TextChunker:
         
         return chunks
     
-    def _merge_small_chunks(self, chunks: list[str]) -> list[str]:
+    def _merge_small_chunks(self, chunks: List[str]) -> List[str]:
         """Merge chunks that are too small."""
         if not chunks:
             return []
@@ -314,10 +483,10 @@ class TextChunker:
                     # Try to append to previous chunk
                     prev = merged[-1]
                     prev_combined = self.count_tokens(prev + ' ' + current)
-                    if prev_combined <= self.target_tokens * 1.2:  # Allow slight overflow
+                    if prev_combined <= self.target_tokens * 1.2:
                         merged[-1] = prev + ' ' + current
                     else:
-                        merged.append(current)  # Keep small chunk anyway
+                        merged.append(current)
                 else:
                     merged.append(current)
                 
@@ -339,7 +508,7 @@ class TextChunker:
         
         return merged
     
-    def _add_overlap(self, chunks: list[str]) -> list[tuple[str, bool]]:
+    def _add_overlap(self, chunks: List[str]) -> List[Tuple[str, bool]]:
         """
         Add overlap from previous chunk to each chunk.
         
@@ -361,7 +530,6 @@ class TextChunker:
             overlap_text = self._get_overlap_text(prev_chunk)
             
             if overlap_text:
-                # Prepend overlap to current chunk
                 combined = overlap_text + ' ' + current_chunk
                 result.append((combined, True))
             else:
@@ -374,12 +542,10 @@ class TextChunker:
         if not text:
             return ''
         
-        # Get last N tokens worth of text
         words = text.split()
         overlap_words = []
         token_count = 0
         
-        # Work backwards through words
         for word in reversed(words):
             word_tokens = self.count_tokens(word + ' ')
             if token_count + word_tokens > self.overlap_tokens:
@@ -391,14 +557,12 @@ class TextChunker:
     
     def _detect_section(self, text: str) -> Optional[str]:
         """Detect section type from text content."""
-        # Check first 100 chars for section headers
         start = text[:100].lower()
         
         for section_name, pattern in self.SECTION_PATTERNS.items():
             if pattern.search(start):
                 return section_name
         
-        # Default based on content keywords
         if 'abstract' in start or 'title:' in start:
             return 'abstract'
         

@@ -84,3 +84,4 @@ class SearchResult(BaseModel):
     total_results: int
     source: str
     query: str
+    error: Optional[str] = None  # Error message if search failed
