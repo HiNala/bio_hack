@@ -64,7 +64,7 @@ docker compose up --build -d
 ```
 
 ### 4. Open the app
-- **Frontend**: http://localhost:3001
+- **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     context_top_n: int = 10
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
+    cors_origins: list[str] = ["http://localhost:3000"]
 
     class Config:
         env_file = ".env"
