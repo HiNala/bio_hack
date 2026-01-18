@@ -20,6 +20,9 @@ from app.routes import (
     rag_router,
     chunk_router,
     embed_router,
+    settings_router,
+    workspaces_router,
+    synthesis_router,
 )
 
 settings = get_settings()
@@ -67,6 +70,9 @@ app.include_router(search_router)
 app.include_router(rag_router)
 app.include_router(chunk_router)
 app.include_router(embed_router)
+app.include_router(settings_router)
+app.include_router(workspaces_router)
+app.include_router(synthesis_router)
 
 
 @app.get("/", tags=["System"])
@@ -77,6 +83,11 @@ async def root():
         "version": settings.app_version,
         "docs": "/docs",
         "health": "/health",
+        "features": {
+            "synthesis": "/synthesis",
+            "workspaces": "/workspaces",
+            "settings": "/settings",
+        }
     }
 
 

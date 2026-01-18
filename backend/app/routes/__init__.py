@@ -13,6 +13,9 @@ from app.routes.search import router as search_router
 from app.routes.rag import router as rag_router
 from app.routes.chunk import router as chunk_router
 from app.routes.embed import router as embed_router
+from app.routes.settings import router as settings_router
+from app.routes.workspaces import router as workspaces_router
+from app.routes.synthesis import router as synthesis_router
 
 __all__ = [
     "health_router",
@@ -24,4 +27,7 @@ __all__ = [
     "rag_router",
     "chunk_router",
     "embed_router",
+    "settings_router",
+    "workspaces_router",
+    "synthesis_router",
 ]

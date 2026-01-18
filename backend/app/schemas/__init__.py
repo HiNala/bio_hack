@@ -33,6 +33,31 @@ from app.schemas.rag import (
     RAGResponse,
     Citation,
 )
+from app.schemas.user import (
+    UserCreate,
+    UserResponse,
+    WorkspaceCreate,
+    WorkspaceUpdate,
+    WorkspaceResponse,
+    CollectionCreate,
+    CollectionUpdate,
+    CollectionResponse,
+    CollectionPaperAdd,
+    CollectionPaperUpdate,
+    CollectionPaperResponse,
+)
+from app.schemas.settings import (
+    SettingsUpdate,
+    SettingsResponse,
+    DEFAULT_SETTINGS,
+)
+from app.schemas.synthesis import (
+    SynthesisRequest,
+    SynthesisResponse,
+    SynthesisFeedback,
+    SourceReference,
+    SavedQueryResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -55,4 +80,26 @@ __all__ = [
     "RAGQueryRequest",
     "RAGResponse",
     "Citation",
+    # User & Workspace
+    "UserCreate",
+    "UserResponse",
+    "WorkspaceCreate",
+    "WorkspaceUpdate",
+    "WorkspaceResponse",
+    "CollectionCreate",
+    "CollectionUpdate",
+    "CollectionResponse",
+    "CollectionPaperAdd",
+    "CollectionPaperUpdate",
+    "CollectionPaperResponse",
+    # Settings
+    "SettingsUpdate",
+    "SettingsResponse",
+    "DEFAULT_SETTINGS",
+    # Synthesis
+    "SynthesisRequest",
+    "SynthesisResponse",
+    "SynthesisFeedback",
+    "SourceReference",
+    "SavedQueryResponse",
 ]
