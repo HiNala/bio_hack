@@ -9,7 +9,7 @@ interface FloatingInputProps {
 }
 
 export const FloatingInput = forwardRef<{ focus: () => void }, FloatingInputProps>(
-  function FloatingInput({ onSubmit, isLoading = false, placeholder = "Ask a research question..." }, ref) {
+  function FloatingInput({ onSubmit, isLoading = false, placeholder = "State a research question or hypothesis..." }, ref) {
     const [value, setValue] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);

@@ -5,22 +5,38 @@ interface EmptyStateProps {
 }
 
 const EXAMPLE_QUERIES = [
-  "What are the health effects of intermittent fasting?",
-  "Compare CRISPR vs traditional gene therapy",
-  "How does the double slit experiment work with molecules?",
-  "Latest developments in room-temperature superconductors",
-  "What causes antibiotic resistance?",
+  {
+    query: "What is experimentally verified vs theoretical in quantum decoherence?",
+    type: "verification",
+  },
+  {
+    query: "What disagreements exist in CRISPR off-target effects research?",
+    type: "disagreement",
+  },
+  {
+    query: "Compare evidence for Copenhagen vs Many-Worlds interpretations",
+    type: "comparison",
+  },
+  {
+    query: "What evidence supports intermittent fasting for longevity?",
+    type: "evidence",
+  },
+  {
+    query: "What are the open questions in room-temperature superconductivity?",
+    type: "gaps",
+  },
 ];
 
 export function EmptyState({ onExampleClick }: EmptyStateProps) {
   return (
-    <div className="max-w-xl mx-auto px-4 pt-16 pb-8 animate-fadeIn">
-      {/* Hero Icon */}
+    <div className="max-w-xl mx-auto px-4 pt-12 pb-8 animate-fadeIn">
+      {/* Hero Icon - Scientific/Research themed */}
       <div className="flex justify-center mb-8">
         <div 
-          className="w-16 h-16 rounded-2xl flex items-center justify-center"
+          className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
           style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)' }}
         >
+          {/* Microscope/Research icon */}
           <svg 
             className="w-8 h-8"
             style={{ color: 'var(--accent-blue)' }}
@@ -31,47 +47,54 @@ export function EmptyState({ onExampleClick }: EmptyStateProps) {
             strokeLinecap="round" 
             strokeLinejoin="round"
           >
-            {/* Sparkle/star icon */}
-            <path d="M12 3v2m0 14v2M3 12h2m14 0h2" />
-            <path d="M5.636 5.636l1.414 1.414m9.9 9.9l1.414 1.414M5.636 18.364l1.414-1.414m9.9-9.9l1.414-1.414" />
-            <circle cx="12" cy="12" r="4" />
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4m0 12v4" />
+            <path d="m4.93 4.93 2.83 2.83m8.48 8.48 2.83 2.83" />
+            <path d="m19.07 4.93-2.83 2.83m-8.48 8.48-2.83 2.83" />
           </svg>
         </div>
       </div>
 
-      {/* Hero Text */}
-      <div className="text-center mb-12">
+      {/* Hero Text - Scientific framing */}
+      <div className="text-center mb-10">
         <h1 
           className="text-3xl font-semibold mb-4"
           style={{ color: 'var(--text-primary)' }}
         >
-          Ask anything about science
+          Scientific Literature Intelligence
         </h1>
         <p 
           className="text-base leading-relaxed max-w-md mx-auto"
           style={{ color: 'var(--text-secondary)' }}
         >
-          Explore research across millions of papers.
+          State a research question or hypothesis.
           <br />
-          Get synthesized answers with citations.
+          Get evidence-backed synthesis with full citations.
         </p>
       </div>
 
-      {/* Try asking label */}
+      {/* Method badges */}
+      <div className="flex justify-center gap-2 mb-10 flex-wrap">
+        <MethodBadge icon="🔍" label="Multi-source search" />
+        <MethodBadge icon="📊" label="Evidence ranking" />
+        <MethodBadge icon="🔗" label="Citation linking" />
+      </div>
+
+      {/* Example queries label */}
       <p 
-        className="text-sm text-center mb-4"
+        className="text-xs font-semibold uppercase tracking-wider text-center mb-4"
         style={{ color: 'var(--text-tertiary)' }}
       >
-        Try asking:
+        Example Research Questions
       </p>
 
       {/* Example Query Cards */}
       <div className="space-y-3">
-        {EXAMPLE_QUERIES.map((query, index) => (
+        {EXAMPLE_QUERIES.map((item, index) => (
           <button
             key={index}
-            onClick={() => onExampleClick(query)}
-            className="w-full text-left p-4 rounded-xl border transition-all duration-200 group"
+            onClick={() => onExampleClick(item.query)}
+            className="w-full text-left p-4 rounded-xl border transition-all duration-200 group flex items-start gap-3"
             style={{
               backgroundColor: 'var(--bg-card)',
               borderColor: 'var(--border-light)',
@@ -85,15 +108,74 @@ export function EmptyState({ onExampleClick }: EmptyStateProps) {
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
+            <QueryTypeIcon type={item.type} />
             <span 
-              className="text-sm transition-colors duration-200"
+              className="text-sm transition-colors duration-200 flex-1"
               style={{ color: 'var(--text-secondary)' }}
             >
-              {query}
+              {item.query}
             </span>
+            <svg 
+              className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5"
+              style={{ color: 'var(--text-tertiary)' }}
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
         ))}
       </div>
+
+      {/* Footer note */}
+      <p 
+        className="text-xs text-center mt-8 max-w-sm mx-auto"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        Papers sourced from OpenAlex & Semantic Scholar. 
+        All claims are linked to original research.
+      </p>
     </div>
+  );
+}
+
+function MethodBadge({ icon, label }: { icon: string; label: string }) {
+  return (
+    <span 
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
+      style={{ 
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border-light)',
+        color: 'var(--text-secondary)',
+      }}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function QueryTypeIcon({ type }: { type: string }) {
+  const icons: Record<string, { emoji: string; color: string }> = {
+    verification: { emoji: '✓', color: 'var(--accent-green)' },
+    disagreement: { emoji: '⚡', color: 'var(--accent-purple)' },
+    comparison: { emoji: '⚖', color: 'var(--accent-blue)' },
+    evidence: { emoji: '📊', color: 'var(--accent-blue)' },
+    gaps: { emoji: '?', color: '#F59E0B' },
+  };
+  
+  const config = icons[type] || icons.evidence;
+  
+  return (
+    <span 
+      className="w-6 h-6 rounded-md flex items-center justify-center text-xs flex-shrink-0"
+      style={{ 
+        backgroundColor: `${config.color}15`,
+        color: config.color,
+      }}
+    >
+      {config.emoji}
+    </span>
   );
 }

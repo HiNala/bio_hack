@@ -28,6 +28,13 @@ interface Message {
   keyFindings?: string[];
   consensus?: string[];
   openQuestions?: string[];
+  toolActivity?: {
+    openalexPapers: number;
+    semanticScholarPapers: number;
+    uniquePapers: number;
+    chunksCreated: number;
+    embeddingsGenerated: number;
+  };
 }
 
 export default function Home() {
@@ -192,11 +199,11 @@ export default function Home() {
     setIsLoading(true);
     setCurrentMessage('Starting search...');
     setProgressSteps([
-      { id: 'parsing', label: 'Parsing query', status: 'active' },
-      { id: 'fetching', label: 'Fetching papers', status: 'pending' },
-      { id: 'storing', label: 'Storing papers', status: 'pending' },
-      { id: 'chunking', label: 'Chunking abstracts', status: 'pending' },
-      { id: 'embedding', label: 'Creating embeddings', status: 'pending' },
+      { id: 'parsing', label: 'Parsing research query', status: 'active' },
+      { id: 'fetching', label: 'Querying literature APIs', status: 'pending' },
+      { id: 'storing', label: 'Deduplicating & storing', status: 'pending' },
+      { id: 'chunking', label: 'Segmenting text', status: 'pending' },
+      { id: 'embedding', label: 'Generating vectors', status: 'pending' },
     ]);
 
     setLiveStats(prev => ({
@@ -260,11 +267,11 @@ export default function Home() {
 
         if (status.progress?.stages) {
           setProgressSteps([
-            { id: 'parsing', label: 'Parsing query', status: mapStage(status.progress.stages.parsing?.status) },
-            { id: 'fetching', label: 'Fetching papers', status: mapStage(status.progress.stages.fetching?.status) },
-            { id: 'storing', label: 'Storing papers', status: mapStage(status.progress.stages.storing?.status) },
-            { id: 'chunking', label: 'Chunking abstracts', status: mapStage(status.progress.stages.chunking?.status) },
-            { id: 'embedding', label: 'Creating embeddings', status: mapStage(status.progress.stages.embedding?.status) },
+            { id: 'parsing', label: 'Parsing research query', status: mapStage(status.progress.stages.parsing?.status) },
+            { id: 'fetching', label: 'Querying literature APIs', status: mapStage(status.progress.stages.fetching?.status) },
+            { id: 'storing', label: 'Deduplicating & storing', status: mapStage(status.progress.stages.storing?.status) },
+            { id: 'chunking', label: 'Segmenting text', status: mapStage(status.progress.stages.chunking?.status) },
+            { id: 'embedding', label: 'Generating vectors', status: mapStage(status.progress.stages.embedding?.status) },
           ]);
         }
 
@@ -304,9 +311,19 @@ export default function Home() {
               url: paper.url || null,
             }));
 
+            // Capture tool activity for display
+            const toolActivity = {
+              openalexPapers: progress?.papers.openalex_found || 0,
+              semanticScholarPapers: progress?.papers.semantic_scholar_found || 0,
+              uniquePapers: progress?.papers.papers_stored || 0,
+              chunksCreated: progress?.chunks.total_created || 0,
+              embeddingsGenerated: progress?.embeddings.completed || 0,
+            };
+
             showInfo('Papers ingested', `Found ${progress?.papers.papers_stored || 0} papers. Synthesizing answer...`);
             
             const assistantMessage = await generateRAGSynthesis(currentQuery, sources);
+            assistantMessage.toolActivity = toolActivity;
             setMessages(prev => [...prev, assistantMessage]);
 
             showSuccess('Analysis complete', `Analyzed ${assistantMessage.papersAnalyzed || 0} papers`);
@@ -418,6 +435,7 @@ export default function Home() {
                     sources={message.sources || []}
                     papersAnalyzed={message.papersAnalyzed || 0}
                     onSourceClick={handleSourceClick}
+                    toolActivity={message.toolActivity}
                   />
                 )
               ))}
@@ -438,7 +456,7 @@ export default function Home() {
         ref={inputRef}
         onSubmit={handleSubmit}
         isLoading={isLoading}
-        placeholder={hasMessages ? "Ask a follow-up question..." : "Ask a research question..."}
+        placeholder={hasMessages ? "Ask a follow-up question or refine your hypothesis..." : "State a research question or hypothesis..."}
       />
 
       {/* Live stats sidebar */}

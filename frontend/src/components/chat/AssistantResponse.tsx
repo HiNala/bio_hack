@@ -19,6 +19,13 @@ interface AssistantResponseProps {
   sources: Source[];
   papersAnalyzed: number;
   onSourceClick?: (source: Source) => void;
+  toolActivity?: {
+    openalexPapers: number;
+    semanticScholarPapers: number;
+    uniquePapers: number;
+    chunksCreated: number;
+    embeddingsGenerated: number;
+  };
 }
 
 export function AssistantResponse({
@@ -26,257 +33,466 @@ export function AssistantResponse({
   sources,
   papersAnalyzed,
   onSourceClick,
+  toolActivity,
 }: AssistantResponseProps) {
-  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [evidenceExpanded, setEvidenceExpanded] = useState(false);
 
-  // Parse content with markdown-like formatting and citations
-  const renderContent = (text: string) => {
-    // Split by markdown elements while preserving them
-    const parts = text.split(/(\*\*[^*]+\*\*|\[\d+\])/g);
-    
-    return parts.map((part, i) => {
-      // Check for bold markdown
-      const boldMatch = part.match(/^\*\*([^*]+)\*\*$/);
-      if (boldMatch) {
-        return (
-          <strong key={i} style={{ fontWeight: 600 }}>
-            {boldMatch[1]}
-          </strong>
-        );
-      }
-
-      // Check for citation
-      const citationMatch = part.match(/^\[(\d+)\]$/);
-      if (citationMatch) {
-        const num = parseInt(citationMatch[1]);
-        const source = sources.find(s => s.citationId === num);
-        return (
-          <CitationTooltip
-            key={i}
-            source={source || { citationId: num, paperId: '', title: '', authors: [], year: null, venue: null, doi: null, url: null }}
-            onSourceClick={(s) => onSourceClick?.(s)}
-          >
-            <span className="citation" title={source?.title || `Citation ${num}`}>
-              [{num}]
-            </span>
-          </CitationTooltip>
-        );
-      }
-
-      return <span key={i}>{part}</span>;
-    });
-  };
-
-  // Split content into sections
-  const renderSection = (text: string, idx: number) => {
-    const lines = text.split('\n');
-    
-    return (
-      <div key={idx} className="mb-4">
-        {lines.map((line, lineIdx) => {
-          // Check for section header (starts with **)
-          if (line.startsWith('**') && line.endsWith(':**')) {
-            const title = line.slice(2, -3);
-            return (
-              <h3
-                key={lineIdx}
-                className="text-sm font-semibold mt-4 mb-2"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                {title}
-              </h3>
-            );
-          }
-
-          // Check for bullet point
-          if (line.startsWith('• ') || line.startsWith('- ')) {
-            return (
-              <div
-                key={lineIdx}
-                className="flex gap-2 ml-2 mb-1"
-              >
-                <span style={{ color: 'var(--accent-primary)' }}>•</span>
-                <span>{renderContent(line.slice(2))}</span>
-              </div>
-            );
-          }
-
-          // Regular paragraph
-          if (line.trim()) {
-            return (
-              <p key={lineIdx} className="mb-2">
-                {renderContent(line)}
-              </p>
-            );
-          }
-
-          return null;
-        })}
-      </div>
-    );
-  };
-
-  const visibleSources = sourcesExpanded ? sources : sources.slice(0, 3);
-
-  // Split content by double newlines for paragraphs
-  const paragraphs = content.split('\n\n').filter(p => p.trim());
+  // Parse structured content
+  const sections = parseStructuredContent(content);
 
   return (
-    <div className="mb-6 animate-fadeIn">
-      {/* Main content */}
-      <div
-        className="text-base leading-relaxed mb-4"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {paragraphs.map((paragraph, i) => renderSection(paragraph, i))}
+    <div className="animate-fadeIn space-y-6">
+      {/* Tool Activity Panel (Research Trace) */}
+      {toolActivity && (
+        <div 
+          className="p-4 rounded-xl border"
+          style={{ 
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-light)',
+          }}
+        >
+          <h4 
+            className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+            </svg>
+            Research Trace
+          </h4>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <ToolStep 
+              icon="✓" 
+              label={`Queried OpenAlex`}
+              value={`${toolActivity.openalexPapers} papers`}
+              complete
+            />
+            <ToolStep 
+              icon="✓" 
+              label={`Queried Semantic Scholar`}
+              value={`${toolActivity.semanticScholarPapers} papers`}
+              complete
+            />
+            <ToolStep 
+              icon="✓" 
+              label="Deduplicated results"
+              value={`→ ${toolActivity.uniquePapers} unique`}
+              complete
+            />
+            <ToolStep 
+              icon="✓" 
+              label="Created text chunks"
+              value={`${toolActivity.chunksCreated} chunks`}
+              complete
+            />
+            <ToolStep 
+              icon="✓" 
+              label="Generated embeddings"
+              value={`${toolActivity.embeddingsGenerated} vectors`}
+              complete
+            />
+            <ToolStep 
+              icon="✓" 
+              label="Synthesized answer"
+              value={`${papersAnalyzed} sources`}
+              complete
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Structured Answer Sections */}
+      <div className="space-y-4">
+        {sections.summary && (
+          <AnswerSection
+            title="Summary"
+            icon="📋"
+            isOpen={activeSection === 'summary' || activeSection === null}
+            onToggle={() => setActiveSection(activeSection === 'summary' ? null : 'summary')}
+          >
+            <div className="text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+              {renderContentWithCitations(sections.summary, sources, onSourceClick)}
+            </div>
+          </AnswerSection>
+        )}
+
+        {sections.keyFindings.length > 0 && (
+          <AnswerSection
+            title="Key Findings"
+            icon="🔬"
+            badge={`${sections.keyFindings.length} findings`}
+            isOpen={activeSection === 'findings'}
+            onToggle={() => setActiveSection(activeSection === 'findings' ? null : 'findings')}
+          >
+            <ul className="space-y-2">
+              {sections.keyFindings.map((finding, i) => (
+                <li key={i} className="flex gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--accent-blue)' }}>•</span>
+                  <span>{renderContentWithCitations(finding, sources, onSourceClick)}</span>
+                </li>
+              ))}
+            </ul>
+          </AnswerSection>
+        )}
+
+        {sections.conflicts.length > 0 && (
+          <AnswerSection
+            title="Conflicting Evidence"
+            icon="⚡"
+            badge={`${sections.conflicts.length} conflicts`}
+            isOpen={activeSection === 'conflicts'}
+            onToggle={() => setActiveSection(activeSection === 'conflicts' ? null : 'conflicts')}
+            accentColor="var(--accent-purple)"
+          >
+            <ul className="space-y-2">
+              {sections.conflicts.map((conflict, i) => (
+                <li key={i} className="flex gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--accent-purple)' }}>⚠</span>
+                  <span>{renderContentWithCitations(conflict, sources, onSourceClick)}</span>
+                </li>
+              ))}
+            </ul>
+          </AnswerSection>
+        )}
+
+        {sections.openQuestions.length > 0 && (
+          <AnswerSection
+            title="Open Questions"
+            icon="❓"
+            badge={`${sections.openQuestions.length} gaps`}
+            isOpen={activeSection === 'questions'}
+            onToggle={() => setActiveSection(activeSection === 'questions' ? null : 'questions')}
+            accentColor="#F59E0B"
+          >
+            <ul className="space-y-2">
+              {sections.openQuestions.map((question, i) => (
+                <li key={i} className="flex gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span style={{ color: '#F59E0B' }}>?</span>
+                  <span>{renderContentWithCitations(question, sources, onSourceClick)}</span>
+                </li>
+              ))}
+            </ul>
+          </AnswerSection>
+        )}
+
+        {/* Fallback for unstructured content */}
+        {!sections.summary && sections.raw && (
+          <div className="text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+            {renderContentWithCitations(sections.raw, sources, onSourceClick)}
+          </div>
+        )}
       </div>
 
-      {/* Only show sources section if we have sources */}
+      {/* Evidence Panel */}
       {sources.length > 0 && (
-        <>
-          {/* Divider */}
-          <hr
-            className="my-6"
-            style={{ borderColor: 'var(--border-light)', borderTopWidth: '1px' }}
-          />
-
-          {/* Sources section */}
-          <div>
-            {/* Header */}
-            <button
-              onClick={() => setSourcesExpanded(!sourcesExpanded)}
-              className="flex items-center gap-2 mb-3 w-full text-left"
-            >
-              <svg
-                className="w-4 h-4"
-                style={{ color: 'var(--text-secondary)' }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                />
-              </svg>
-              <span
-                className="text-sm font-medium"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                Sources ({sources.length} papers)
-              </span>
-              <svg
-                className={`w-4 h-4 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`}
+        <div 
+          className="border rounded-xl overflow-hidden"
+          style={{ borderColor: 'var(--border-light)' }}
+        >
+          {/* Evidence header */}
+          <button
+            onClick={() => setEvidenceExpanded(!evidenceExpanded)}
+            className="w-full flex items-center justify-between p-4 transition-colors"
+            style={{ backgroundColor: 'var(--bg-card)' }}
+          >
+            <div className="flex items-center gap-3">
+              <svg 
+                className="w-5 h-5"
                 style={{ color: 'var(--text-tertiary)' }}
-                fill="none"
-                viewBox="0 0 24 24"
+                fill="none" 
+                viewBox="0 0 24 24" 
                 stroke="currentColor"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
               </svg>
-            </button>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                Evidence Sources
+              </span>
+              <span 
+                className="text-xs px-2 py-0.5 rounded-full"
+                style={{ 
+                  backgroundColor: 'var(--accent-blue)',
+                  color: 'white',
+                }}
+              >
+                {sources.length} papers
+              </span>
+            </div>
+            <svg 
+              className={`w-5 h-5 transition-transform ${evidenceExpanded ? 'rotate-180' : ''}`}
+              style={{ color: 'var(--text-tertiary)' }}
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-            {/* Source cards */}
-            <div className="space-y-2">
-              {visibleSources.map((source) => (
-                <div
-                  key={source.citationId}
-                  id={`source-${source.citationId}`}
-                  onClick={() => onSourceClick?.(source)}
-                  className="p-3 rounded-lg cursor-pointer transition-all duration-200"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-light)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Citation badge */}
-                    <span
-                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold"
-                      style={{
-                        backgroundColor: 'var(--accent-primary)',
-                        color: 'white',
+          {/* Evidence table */}
+          {evidenceExpanded && (
+            <div className="border-t" style={{ borderColor: 'var(--border-light)' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--bg-page)' }}>
+                    <th className="text-left p-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>#</th>
+                    <th className="text-left p-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>Title</th>
+                    <th className="text-left p-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>Authors</th>
+                    <th className="text-left p-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>Year</th>
+                    <th className="text-left p-3 font-medium" style={{ color: 'var(--text-tertiary)' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((source) => (
+                    <tr 
+                      key={source.citationId}
+                      id={`source-${source.citationId}`}
+                      className="border-t cursor-pointer transition-colors"
+                      style={{ borderColor: 'var(--border-subtle)' }}
+                      onClick={() => onSourceClick?.(source)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-page)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
-                      {source.citationId}
-                    </span>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h4
-                        className="text-sm font-medium truncate"
+                      <td className="p-3">
+                        <span 
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold"
+                          style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}
+                        >
+                          {source.citationId}
+                        </span>
+                      </td>
+                      <td 
+                        className="p-3 max-w-xs truncate" 
                         style={{ color: 'var(--text-primary)' }}
                         title={source.title}
                       >
                         {source.title}
-                      </h4>
-                      <p
-                        className="text-xs mt-1 truncate"
-                        style={{ color: 'var(--text-muted)' }}
-                      >
+                      </td>
+                      <td className="p-3" style={{ color: 'var(--text-secondary)' }}>
                         {source.authors.slice(0, 2).join(', ')}
                         {source.authors.length > 2 && ' et al.'}
-                        {source.year && ` • ${source.year}`}
-                        {source.venue && ` • ${source.venue}`}
-                      </p>
-                    </div>
-
-                    {/* External link */}
-                    {(source.url || source.doi) && (
-                      <a
-                        href={source.url || (source.doi ? `https://doi.org/${source.doi}` : '#')}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex-shrink-0"
-                        style={{ color: 'var(--text-tertiary)' }}
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                          />
-                        </svg>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
+                      </td>
+                      <td className="p-3" style={{ color: 'var(--text-tertiary)' }}>
+                        {source.year || '—'}
+                      </td>
+                      <td className="p-3">
+                        {(source.url || source.doi) && (
+                          <a
+                            href={source.url || `https://doi.org/${source.doi}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 rounded-lg inline-flex transition-colors"
+                            style={{ color: 'var(--text-tertiary)' }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--border-light)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            {/* Show more button */}
-            {sources.length > 3 && !sourcesExpanded && (
-              <button
-                onClick={() => setSourcesExpanded(true)}
-                className="mt-2 text-sm"
-                style={{ color: 'var(--accent-primary)' }}
-              >
-                Show {sources.length - 3} more sources
-              </button>
-            )}
-          </div>
-        </>
+          )}
+        </div>
       )}
 
-      {/* Papers analyzed note */}
-      {papersAnalyzed > 0 && (
-        <p
-          className="text-xs mt-4 text-center"
-          style={{ color: 'var(--text-muted)' }}
+      {/* Methodology note */}
+      <p 
+        className="text-xs text-center pt-2"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        Synthesized from {papersAnalyzed} papers • All claims linked to sources
+      </p>
+    </div>
+  );
+}
+
+// Answer section component with collapsible behavior
+function AnswerSection({
+  title,
+  icon,
+  badge,
+  children,
+  isOpen,
+  onToggle,
+  accentColor = 'var(--accent-blue)',
+}: {
+  title: string;
+  icon: string;
+  badge?: string;
+  children: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+  accentColor?: string;
+}) {
+  return (
+    <div 
+      className="border rounded-xl overflow-hidden"
+      style={{ borderColor: 'var(--border-light)' }}
+    >
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 transition-colors"
+        style={{ backgroundColor: 'var(--bg-card)' }}
+      >
+        <div className="flex items-center gap-2">
+          <span>{icon}</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+            {title}
+          </span>
+          {badge && (
+            <span 
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{ 
+                backgroundColor: `${accentColor}15`,
+                color: accentColor,
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+        <svg 
+          className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--text-tertiary)' }}
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
         >
-          Synthesized from {papersAnalyzed} papers
-        </p>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div 
+          className="p-4 border-t"
+          style={{ 
+            backgroundColor: 'var(--bg-page)',
+            borderColor: 'var(--border-subtle)',
+          }}
+        >
+          {children}
+        </div>
       )}
     </div>
   );
+}
+
+// Tool step component
+function ToolStep({ 
+  icon, 
+  label, 
+  value, 
+  complete 
+}: { 
+  icon: string; 
+  label: string; 
+  value: string; 
+  complete: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span style={{ color: complete ? 'var(--accent-green)' : 'var(--text-tertiary)' }}>
+        {icon}
+      </span>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ color: 'var(--text-tertiary)' }}>({value})</span>
+    </div>
+  );
+}
+
+// Parse structured content from markdown-like format
+function parseStructuredContent(content: string) {
+  const sections = {
+    summary: '',
+    keyFindings: [] as string[],
+    conflicts: [] as string[],
+    openQuestions: [] as string[],
+    raw: content,
+  };
+
+  // Try to extract summary
+  const summaryMatch = content.match(/^(.+?)(?=\n\n\*\*|$)/s);
+  if (summaryMatch) {
+    sections.summary = summaryMatch[1].trim();
+  }
+
+  // Extract key findings
+  const findingsMatch = content.match(/\*\*Key Findings:?\*\*\n([\s\S]*?)(?=\n\n\*\*|$)/i);
+  if (findingsMatch) {
+    sections.keyFindings = findingsMatch[1]
+      .split('\n')
+      .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'))
+      .map(line => line.replace(/^[•-]\s*/, '').trim());
+  }
+
+  // Extract conflicts/consensus (treating consensus as potential conflicts)
+  const conflictsMatch = content.match(/\*\*(?:Scientific Consensus|Conflicting Evidence|Consensus):?\*\*\n([\s\S]*?)(?=\n\n\*\*|$)/i);
+  if (conflictsMatch) {
+    sections.conflicts = conflictsMatch[1]
+      .split('\n')
+      .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'))
+      .map(line => line.replace(/^[•-]\s*/, '').trim());
+  }
+
+  // Extract open questions
+  const questionsMatch = content.match(/\*\*Open Questions:?\*\*\n([\s\S]*?)(?=\n\n\*\*|$)/i);
+  if (questionsMatch) {
+    sections.openQuestions = questionsMatch[1]
+      .split('\n')
+      .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'))
+      .map(line => line.replace(/^[•-]\s*/, '').trim());
+  }
+
+  return sections;
+}
+
+// Render content with clickable citation pills
+function renderContentWithCitations(
+  text: string, 
+  sources: Source[], 
+  onSourceClick?: (source: Source) => void
+) {
+  const parts = text.split(/(\[\d+\])/g);
+  
+  return parts.map((part, i) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (match) {
+      const num = parseInt(match[1]);
+      const source = sources.find(s => s.citationId === num);
+      return (
+        <CitationTooltip
+          key={i}
+          source={source || { citationId: num, paperId: '', title: '', authors: [], year: null, venue: null, doi: null, url: null }}
+          onSourceClick={(s) => onSourceClick?.(s)}
+        >
+          <span 
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-semibold cursor-pointer mx-0.5 transition-colors"
+            style={{ 
+              backgroundColor: 'var(--accent-blue)',
+              color: 'white',
+            }}
+            title={source?.title || `Citation ${num}`}
+          >
+            {num}
+          </span>
+        </CitationTooltip>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
