@@ -31,12 +31,10 @@ services:
       dockerfile: docker/backend.Dockerfile
       target: dev
     container_name: sciencerag-backend
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql+asyncpg://sciencerag:sciencerag@postgres:5432/sciencerag
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENALEX_EMAIL=${OPENALEX_EMAIL:-}
-      - SEMANTIC_SCHOLAR_API_KEY=${SEMANTIC_SCHOLAR_API_KEY:-}
       - DEBUG=true
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
     ports:
