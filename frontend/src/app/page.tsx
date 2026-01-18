@@ -43,7 +43,14 @@ export default function Home() {
     totalPapers: 0,
     totalChunks: 0,
     embeddedChunks: 0,
+    embeddedPapers: 0,
     avgTokensPerChunk: 0,
+    papersWithAbstracts: 0,
+    chunkedPapers: 0,
+    searchableChunks: 0,
+    searchablePapers: 0,
+    embeddingModel: 'text-embedding-3-small',
+    embeddingDimensions: 1536,
     recentQueries: 0,
     processingStatus: 'idle',
     lastUpdate: null,
@@ -76,17 +83,26 @@ export default function Home() {
   // Fetch stats
   const fetchStats = useCallback(async () => {
     try {
-      const [chunkStats, docResponse] = await Promise.all([
+      const [chunkStats, docStats, embedStats, searchStats] = await Promise.all([
         api.getChunkingStats(),
-        api.getDocuments(undefined, 1, 1),
+        api.getDocumentStats(),
+        api.getEmbeddingStats(),
+        api.getSearchStats(),
       ]);
 
       setLiveStats(prev => ({
         ...prev,
-        totalPapers: docResponse.total,
+        totalPapers: docStats.total_papers,
+        papersWithAbstracts: docStats.papers_with_abstracts,
+        chunkedPapers: docStats.chunked_papers,
         totalChunks: chunkStats.total_chunks,
         embeddedChunks: chunkStats.embedded_chunks,
         avgTokensPerChunk: chunkStats.avg_tokens_per_chunk,
+        embeddedPapers: embedStats.embedded_papers,
+        embeddingModel: embedStats.embedding_model,
+        embeddingDimensions: embedStats.dimensions,
+        searchableChunks: searchStats.searchable_chunks,
+        searchablePapers: searchStats.searchable_papers,
         lastUpdate: new Date(),
       }));
     } catch (err) {

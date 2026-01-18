@@ -6,7 +6,14 @@ export interface LiveStats {
   totalPapers: number;
   totalChunks: number;
   embeddedChunks: number;
+  embeddedPapers: number;
   avgTokensPerChunk: number;
+  papersWithAbstracts: number;
+  chunkedPapers: number;
+  searchableChunks: number;
+  searchablePapers: number;
+  embeddingModel: string;
+  embeddingDimensions: number;
   recentQueries: number;
   processingStatus: 'idle' | 'searching' | 'processing' | 'embedding' | 'ready';
   lastUpdate: Date | null;
@@ -60,19 +67,23 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
 
   if (!isOpen) return null;
 
+  const embeddedPercent = stats.totalChunks > 0
+    ? Math.round((stats.embeddedChunks / stats.totalChunks) * 100)
+    : 0;
+
   return (
     <div
-      className="fixed right-0 top-0 h-full w-80 border-l overflow-y-auto z-40 transition-transform"
+      className="fixed right-0 top-0 h-full w-80 border-l overflow-y-auto z-40 transition-transform shadow-lg"
       style={{
-        backgroundColor: 'var(--bg-primary)',
+        backgroundColor: 'var(--bg-secondary)',
         borderColor: 'var(--border-light)',
       }}
     >
       {/* Header */}
       <div
-        className="sticky top-0 p-4 border-b"
+        className="sticky top-0 p-4 border-b backdrop-blur"
         style={{
-          backgroundColor: 'var(--bg-primary)',
+          backgroundColor: 'rgba(250, 250, 249, 0.9)',
           borderColor: 'var(--border-light)',
         }}
       >
@@ -92,14 +103,21 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
         </h2>
         
         {/* Status indicator */}
-        <div className="flex items-center gap-2 mt-2">
-          <div
-            className={`w-2 h-2 rounded-full ${stats.processingStatus !== 'idle' ? 'animate-pulse' : ''}`}
-            style={{ backgroundColor: getStatusColor(stats.processingStatus) }}
-          />
-          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {getStatusLabel(stats.processingStatus)}
-          </span>
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full ${stats.processingStatus !== 'idle' ? 'animate-pulse' : ''}`}
+              style={{ backgroundColor: getStatusColor(stats.processingStatus) }}
+            />
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {getStatusLabel(stats.processingStatus)}
+            </span>
+          </div>
+          {stats.lastUpdate && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {stats.lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
         </div>
       </div>
 
@@ -108,17 +126,21 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
         {/* Current search stats (when active) */}
         {stats.currentSearch && stats.processingStatus !== 'idle' && (
           <div
-            className="p-4 rounded-lg animate-fadeIn"
+            className="p-4 rounded-xl animate-fadeIn"
             style={{
-              backgroundColor: 'var(--bg-secondary)',
+              backgroundColor: 'var(--bg-primary)',
               border: '1px solid var(--border-light)',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
             <h3
-              className="text-sm font-medium mb-3"
+              className="text-sm font-medium mb-3 flex items-center gap-2"
               style={{ color: 'var(--text-primary)' }}
             >
-              Current Search
+              <span>Current Search</span>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                live
+              </span>
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <StatItem
@@ -210,7 +232,14 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
             </svg>
             Database
           </h3>
-          <div className="space-y-3">
+          <div
+            className="p-4 rounded-xl space-y-3"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-light)',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
             <StatRow
               label="Total Papers"
               value={stats.totalPapers.toLocaleString()}
@@ -252,39 +281,80 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
               value={stats.avgTokensPerChunk.toFixed(0)}
               pulse={pulse}
             />
+            <StatRow
+              label="Papers w/ Abstracts"
+              value={stats.papersWithAbstracts.toLocaleString()}
+              pulse={pulse}
+            />
+            <StatRow
+              label="Chunked Papers"
+              value={stats.chunkedPapers.toLocaleString()}
+              pulse={pulse}
+            />
+            <StatRow
+              label="Embedded Papers"
+              value={stats.embeddedPapers.toLocaleString()}
+              pulse={pulse}
+            />
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Search index */}
         <div>
           <h3
             className="text-sm font-medium mb-3"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Quick Info
+            Search Index
           </h3>
           <div
-            className="p-3 rounded-lg text-xs space-y-2"
+            className="p-4 rounded-xl space-y-2"
             style={{
-              backgroundColor: 'var(--bg-secondary)',
-              color: 'var(--text-muted)',
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-light)',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
-            <p>• Papers are fetched from OpenAlex & Semantic Scholar</p>
-            <p>• Text is chunked for semantic search</p>
-            <p>• Embeddings enable similarity matching</p>
+            <StatRow
+              label="Searchable Chunks"
+              value={stats.searchableChunks.toLocaleString()}
+            />
+            <StatRow
+              label="Searchable Papers"
+              value={stats.searchablePapers.toLocaleString()}
+            />
+            <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              <p>Vector similarity ready • {embeddedPercent}% embedded</p>
+            </div>
           </div>
         </div>
 
-        {/* Last update */}
-        {stats.lastUpdate && (
-          <p
-            className="text-xs text-center"
-            style={{ color: 'var(--text-muted)' }}
+        {/* Models */}
+        <div>
+          <h3
+            className="text-sm font-medium mb-3"
+            style={{ color: 'var(--text-secondary)' }}
           >
-            Last updated: {stats.lastUpdate.toLocaleTimeString()}
-          </p>
-        )}
+            Models
+          </h3>
+          <div
+            className="p-4 rounded-xl space-y-2"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-light)',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <StatRow
+              label="Embedding Model"
+              value={stats.embeddingModel}
+            />
+            <StatRow
+              label="Dimensions"
+              value={stats.embeddingDimensions.toLocaleString()}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
