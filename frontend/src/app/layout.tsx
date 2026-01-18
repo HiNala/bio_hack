@@ -4,6 +4,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "ScienceRAG",
   description: "AI-powered scientific literature intelligence platform",
+  icons: {
+    icon: [
+      { url: "/logo.png", type: "image/png" },
+    ],
+    apple: [
+      { url: "/logo.png", type: "image/png" },
+    ],
+    shortcut: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -20,6 +29,8 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" 
           rel="stylesheet" 
         />
+        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body className="antialiased">
         {children}

@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+
 interface HeaderProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
@@ -18,24 +20,14 @@ export function Header({ onToggleSettings }: HeaderProps) {
       <div className="h-full max-w-screen-2xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2.5">
-          <div 
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: 'var(--accent-blue)', opacity: 0.9 }}
-          >
-            <svg 
-              className="w-4.5 h-4.5 text-white" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2"
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-              <path d="m4.93 4.93 2.83 2.83m8.48 8.48 2.83 2.83M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83" />
-            </svg>
-          </div>
+          <Image 
+            src="/logo.png"
+            alt="ScienceRAG Logo"
+            width={32}
+            height={32}
+            className="w-8 h-8"
+            priority
+          />
           <span 
             className="text-lg font-semibold"
             style={{ color: 'var(--text-primary)' }}
