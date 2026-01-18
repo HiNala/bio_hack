@@ -1,0 +1,84 @@
+# ScienceRAG Docker Compose Configuration
+# Runs all services for local development
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
+    container_name: sciencerag-postgres
+    environment:
+      POSTGRES_USER: sciencerag
+      POSTGRES_PASSWORD: sciencerag
+      POSTGRES_DB: sciencerag
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sciencerag -d sciencerag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sciencerag-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: dev
+    container_name: sciencerag-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://sciencerag:sciencerag@postgres:5432/sciencerag
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENALEX_EMAIL=${OPENALEX_EMAIL:-}
+      - SEMANTIC_SCHOLAR_API_KEY=${SEMANTIC_SCHOLAR_API_KEY:-}
+      - DEBUG=true
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sciencerag-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      target: dev
+    container_name: sciencerag-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - WATCHPACK_POLLING=true
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - sciencerag-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sciencerag-network:
+    driver: bridge
