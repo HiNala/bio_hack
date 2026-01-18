@@ -16,6 +16,7 @@ class ParsedQuery(BaseModel):
     year_to: Optional[int] = None
     fields: list[str] = Field(default_factory=list)
     query_type: Literal["factual", "synthesis", "comparison", "survey"] = "synthesis"
+    search_queries: list[str] = Field(default_factory=list)
 
 
 class AnalyzeRequest(BaseModel):

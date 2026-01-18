@@ -9,7 +9,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, func
+from sqlalchemy import select, text, func, bindparam
 from sqlalchemy.orm import joinedload
 
 from app.models import Chunk, Paper
@@ -83,14 +83,29 @@ class SearchService:
         # Generate query embedding
         query_embedding = await self.embedding_service.embed_query(query)
         
-        # Build search query with pgvector
-        # Using cosine distance: 1 - cosine_similarity
-        # Lower distance = more similar
+        # Format embedding as PostgreSQL vector literal
+        embedding_literal = "[" + ",".join(str(x) for x in query_embedding) + "]"
         
-        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        # Build query with proper parameter escaping
+        # Note: We embed the vector directly in the SQL to avoid parameter binding issues with pgvector
+        limit = top_k * 3 if dedupe_papers else top_k
         
-        # Build the SQL query
-        sql = text("""
+        # Build WHERE clause dynamically
+        where_clauses = ["c.embedding IS NOT NULL"]
+        params = {"limit_val": limit}
+        
+        if year_from is not None:
+            where_clauses.append("p.year >= :year_from")
+            params["year_from"] = year_from
+        
+        if year_to is not None:
+            where_clauses.append("p.year <= :year_to")
+            params["year_to"] = year_to
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Use string formatting for the embedding vector (safe since we control it)
+        sql = text(f"""
             SELECT 
                 c.id as chunk_id,
                 c.paper_id,
@@ -102,26 +117,15 @@ class SearchService:
                 p.citation_count as paper_citation_count,
                 p.doi as paper_doi,
                 p.landing_url as paper_url,
-                1 - (c.embedding <=> :embedding::vector) as similarity
+                1 - (c.embedding <=> '{embedding_literal}'::vector) as similarity
             FROM chunks c
             JOIN papers p ON c.paper_id = p.id
-            WHERE c.embedding IS NOT NULL
-            AND (:year_from IS NULL OR p.year >= :year_from)
-            AND (:year_to IS NULL OR p.year <= :year_to)
-            ORDER BY c.embedding <=> :embedding::vector
-            LIMIT :limit
+            WHERE {where_sql}
+            ORDER BY c.embedding <=> '{embedding_literal}'::vector
+            LIMIT :limit_val
         """)
         
-        result = await self.db.execute(
-            sql,
-            {
-                "embedding": embedding_str,
-                "year_from": year_from,
-                "year_to": year_to,
-                "limit": top_k * 3 if dedupe_papers else top_k,  # Fetch extra for dedup
-            }
-        )
-        
+        result = await self.db.execute(sql, params)
         rows = result.fetchall()
         
         # Process results with ranking
@@ -184,9 +188,9 @@ class SearchService:
         """
         top_k = top_k or settings.retrieval_top_k
         
-        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+        embedding_literal = "[" + ",".join(str(x) for x in embedding) + "]"
         
-        sql = text("""
+        sql = text(f"""
             SELECT 
                 c.id as chunk_id,
                 c.paper_id,
@@ -198,19 +202,15 @@ class SearchService:
                 p.citation_count as paper_citation_count,
                 p.doi as paper_doi,
                 p.landing_url as paper_url,
-                1 - (c.embedding <=> :embedding::vector) as similarity
+                1 - (c.embedding <=> '{embedding_literal}'::vector) as similarity
             FROM chunks c
             JOIN papers p ON c.paper_id = p.id
             WHERE c.embedding IS NOT NULL
-            ORDER BY c.embedding <=> :embedding::vector
-            LIMIT :limit
+            ORDER BY c.embedding <=> '{embedding_literal}'::vector
+            LIMIT :limit_val
         """)
         
-        result = await self.db.execute(
-            sql,
-            {"embedding": embedding_str, "limit": top_k}
-        )
-        
+        result = await self.db.execute(sql, {"limit_val": top_k})
         rows = result.fetchall()
         
         results = []

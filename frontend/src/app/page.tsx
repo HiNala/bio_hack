@@ -16,7 +16,7 @@ import {
   type ProgressStep,
   type LiveStats,
 } from '@/components/chat';
-import { api, type Paper, type IngestJobStatusResponse } from '@/lib/api';
+import { api, type IngestJobStatusResponse, type RAGResponse } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -25,6 +25,9 @@ interface Message {
   timestamp: Date;
   sources?: Source[];
   papersAnalyzed?: number;
+  keyFindings?: string[];
+  consensus?: string[];
+  openQuestions?: string[];
 }
 
 export default function Home() {
@@ -35,7 +38,7 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [currentJobStatus, setCurrentJobStatus] = useState<IngestJobStatusResponse | null>(null);
+  const [currentQuery, setCurrentQuery] = useState<string>('');
   const [liveStats, setLiveStats] = useState<LiveStats>({
     totalPapers: 0,
     totalChunks: 0,
@@ -50,7 +53,7 @@ export default function Home() {
   const inputRef = useRef<{ focus: () => void } | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const jobPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { toasts, dismissToast, error: showError, success: showSuccess } = useToasts();
+  const { toasts, dismissToast, error: showError, success: showSuccess, info: showInfo } = useToasts();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -107,6 +110,79 @@ export default function Home() {
     }
   }, [messages, isLoading]);
 
+  // Generate RAG synthesis after ingestion
+  const generateRAGSynthesis = useCallback(async (question: string, sources: Source[]): Promise<Message> => {
+    try {
+      setCurrentMessage('Synthesizing answer from papers...');
+      setProgressSteps(prev => [...prev, { id: 'synthesis', label: 'Synthesizing answer', status: 'active' }]);
+
+      const ragResponse: RAGResponse = await api.askRAG(question, 10);
+
+      setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'completed' } : s));
+
+      // Format the RAG response into a readable message
+      let content = ragResponse.summary || '';
+      
+      if (ragResponse.key_findings && ragResponse.key_findings.length > 0) {
+        content += '\n\n**Key Findings:**\n';
+        ragResponse.key_findings.forEach((finding, i) => {
+          content += `• ${finding}\n`;
+        });
+      }
+
+      if (ragResponse.consensus && ragResponse.consensus.length > 0) {
+        content += '\n**Scientific Consensus:**\n';
+        ragResponse.consensus.forEach(item => {
+          content += `• ${item}\n`;
+        });
+      }
+
+      if (ragResponse.open_questions && ragResponse.open_questions.length > 0) {
+        content += '\n**Open Questions:**\n';
+        ragResponse.open_questions.forEach(item => {
+          content += `• ${item}\n`;
+        });
+      }
+
+      // Update sources with RAG citations
+      const ragSources: Source[] = ragResponse.citations.map((citation, idx) => ({
+        citationId: idx + 1,
+        paperId: citation.paper_id,
+        title: citation.title,
+        authors: citation.authors,
+        year: citation.year,
+        venue: null,
+        doi: null,
+        url: null,
+      }));
+
+      return {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content,
+        timestamp: new Date(),
+        sources: ragSources.length > 0 ? ragSources : sources,
+        papersAnalyzed: ragResponse.papers_analyzed || sources.length,
+        keyFindings: ragResponse.key_findings,
+        consensus: ragResponse.consensus,
+        openQuestions: ragResponse.open_questions,
+      };
+    } catch (err) {
+      console.error('RAG synthesis failed:', err);
+      setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'error' } : s));
+      
+      // Return a fallback message with just the sources
+      return {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `I found ${sources.length} relevant papers on "${question}". The papers have been stored in your knowledge base and are now searchable.\n\nNote: AI synthesis is currently unavailable. You can explore the sources below.`,
+        timestamp: new Date(),
+        sources,
+        papersAnalyzed: sources.length,
+      };
+    }
+  }, []);
+
   // Process a query
   const handleSubmit = async (query: string) => {
     // Add user message
@@ -117,6 +193,7 @@ export default function Home() {
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
+    setCurrentQuery(query);
 
     // Start loading
     setIsLoading(true);
@@ -188,8 +265,7 @@ export default function Home() {
 
     const pollJob = async () => {
       try {
-        const status = await api.getIngestJobStatus(currentJobId);
-        setCurrentJobStatus(status);
+        const status: IngestJobStatusResponse = await api.getIngestJobStatus(currentJobId);
         setCurrentMessage(`Stage: ${status.status}`);
 
         // Map to progress steps
@@ -227,8 +303,6 @@ export default function Home() {
             clearInterval(jobPollIntervalRef.current);
           }
 
-          setIsLoading(false);
-
           if (status.status === 'completed') {
             // Fetch papers for sources
             const papersResponse = await api.getIngestJobPapers(currentJobId, 10, 0);
@@ -243,31 +317,32 @@ export default function Home() {
               url: paper.url || null,
             }));
 
-            const responseContent = generateSummaryResponse(
-              status.original_query,
-              [],
-              sources
-            );
+            // Now run RAG synthesis
+            showInfo('Papers ingested', `Found ${progress?.papers.papers_stored || 0} papers. Synthesizing answer...`);
+            
+            const assistantMessage = await generateRAGSynthesis(currentQuery, sources);
+            setMessages(prev => [...prev, assistantMessage]);
 
-            setMessages(prev => [
-              ...prev,
-              {
-                id: (Date.now() + 1).toString(),
-                type: 'assistant',
-                content: responseContent,
-                timestamp: new Date(),
-                sources,
-                papersAnalyzed: progress?.papers.papers_stored || 0,
-              },
-            ]);
-
-            showSuccess('Search complete', `Found ${progress?.papers.papers_stored || 0} papers and created ${progress?.chunks.total_created || 0} chunks.`);
+            showSuccess('Analysis complete', `Analyzed ${assistantMessage.papersAnalyzed || 0} papers`);
           } else {
             showError('Ingestion failed', status.error?.message || 'Unknown error');
+            
+            const errorMessage: Message = {
+              id: (Date.now() + 1).toString(),
+              type: 'assistant',
+              content: `I encountered an error: ${status.error?.message || 'Unknown error'}. Please try again with a different query.`,
+              timestamp: new Date(),
+              sources: [],
+              papersAnalyzed: 0,
+            };
+            setMessages(prev => [...prev, errorMessage]);
           }
 
+          setIsLoading(false);
           setCurrentJobId(null);
+          setCurrentQuery('');
           setLiveStats(prev => ({ ...prev, processingStatus: 'idle', currentSearch: undefined }));
+          fetchStats(); // Refresh stats after completion
         }
       } catch (err) {
         console.error('Polling failed:', err);
@@ -280,7 +355,7 @@ export default function Home() {
     return () => {
       if (jobPollIntervalRef.current) clearInterval(jobPollIntervalRef.current);
     };
-  }, [currentJobId, showError, showSuccess]);
+  }, [currentJobId, currentQuery, generateRAGSynthesis, showError, showSuccess, showInfo, fetchStats]);
 
   // Handle example query click
   const handleExampleClick = (query: string) => {
@@ -405,51 +480,4 @@ function mapStage(status?: string): 'pending' | 'active' | 'completed' | 'error'
     default:
       return 'pending';
   }
-}
-
-  // Helper function to generate a response
-function generateSummaryResponse(query: string, papers: Paper[], sources: Source[]): string {
-  if (papers.length === 0) {
-    return `I searched for papers related to "${query}" but couldn't find any results. Try refining your search terms or broadening your query.`;
-  }
-
-  const papersWithAbstracts = papers.filter(p => p.abstract);
-  const years = papers.map(p => p.publication_year).filter(Boolean) as number[];
-  const minYear = years.length > 0 ? Math.min(...years) : null;
-  const maxYear = years.length > 0 ? Math.max(...years) : null;
-
-  let response = `I found ${papers.length} relevant papers on "${query}"`;
-  
-  if (minYear && maxYear) {
-    response += `, spanning from ${minYear} to ${maxYear}`;
-  }
-  response += '.\n\n';
-
-  // Add context from top papers
-  if (sources.length > 0) {
-    response += `The most relevant findings include work by ${sources[0].authors[0] || 'various researchers'}`;
-    if (sources[0].year) response += ` (${sources[0].year})`;
-    response += ` [1]`;
-    
-    if (sources.length > 1) {
-      response += `, and related research`;
-      if (sources[1].authors[0]) response += ` from ${sources[1].authors[0]}`;
-      if (sources[1].year) response += ` (${sources[1].year})`;
-      response += ` [2]`;
-    }
-    response += '.\n\n';
-  }
-
-  // Add abstract snippets if available
-  if (papersWithAbstracts.length > 0) {
-    const topPaper = papersWithAbstracts[0];
-    const snippet = topPaper.abstract?.substring(0, 300);
-    if (snippet) {
-      response += `Key findings suggest: "${snippet}..." [1]\n\n`;
-    }
-  }
-
-  response += `These papers have been stored in your knowledge base and are now searchable. You can explore the sources below or ask follow-up questions to dive deeper into specific aspects.`;
-
-  return response;
 }

@@ -9,7 +9,6 @@ import re
 from typing import Optional
 from dataclasses import dataclass
 
-from anthropic import AsyncAnthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -40,6 +39,9 @@ class RAGService:
     2. Search for relevant chunks
     3. Assemble context from top results
     4. Generate synthesized answer with citations
+    
+    Supports both Anthropic Claude and OpenAI GPT for synthesis.
+    Falls back to OpenAI if Anthropic is not configured.
     """
     
     SYSTEM_PROMPT = """You are a research synthesis assistant. Your job is to answer research questions by synthesizing information from academic papers.
@@ -80,10 +82,20 @@ IMPORTANT RULES:
             db: Database session
         """
         self.db = db
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self.model = settings.synthesis_model
         self.search_service = SearchService(db)
         self.query_parser = QueryParser()
+        
+        # Initialize LLM client (prefer Anthropic, fallback to OpenAI)
+        self.use_anthropic = bool(settings.anthropic_api_key)
+        
+        if self.use_anthropic:
+            from anthropic import AsyncAnthropic
+            self.anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            self.model = settings.synthesis_model
+        else:
+            from openai import AsyncOpenAI
+            self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+            self.model = settings.openai_chat_model
     
     async def answer(
         self,
@@ -97,7 +109,7 @@ IMPORTANT RULES:
         Args:
             question: Research question
             top_k: Number of chunks to retrieve
-            use_llm_parsing: Whether to use Claude for query parsing
+            use_llm_parsing: Whether to use LLM for query parsing
             
         Returns:
             RAGResponse with synthesized answer and citations
@@ -105,14 +117,14 @@ IMPORTANT RULES:
         top_k = top_k or settings.context_top_n
         
         # Step 1: Parse query (optional LLM enhancement)
-        if use_llm_parsing and settings.anthropic_api_key:
+        search_query = question
+        if use_llm_parsing:
             try:
                 parsed_query = await self.query_parser.parse(question)
-                search_query = " ".join(parsed_query.primary_terms)
+                if parsed_query.get("primary_terms"):
+                    search_query = " ".join(parsed_query["primary_terms"])
             except Exception:
-                search_query = question
-        else:
-            search_query = question
+                pass
         
         # Step 2: Search for relevant chunks
         search_results = await self.search_service.search(
@@ -188,7 +200,7 @@ IMPORTANT RULES:
         chunks: list[ContextChunk],
     ) -> dict:
         """
-        Generate synthesized answer using Claude.
+        Generate synthesized answer using LLM.
         
         Args:
             question: Research question
@@ -209,14 +221,11 @@ Relevant Paper Excerpts:
 Please synthesize an answer based on these sources."""
 
         try:
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
-                system=self.SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_message}],
-            )
+            if self.use_anthropic:
+                content = await self._generate_with_anthropic(user_message)
+            else:
+                content = await self._generate_with_openai(user_message)
             
-            content = response.content[0].text
             return self._parse_answer(content)
             
         except Exception as e:
@@ -227,6 +236,28 @@ Please synthesize an answer based on these sources."""
                 "consensus": [],
                 "open_questions": [],
             }
+    
+    async def _generate_with_anthropic(self, user_message: str) -> str:
+        """Generate answer using Anthropic Claude."""
+        response = await self.anthropic_client.messages.create(
+            model=self.model,
+            max_tokens=2000,
+            system=self.SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        return response.content[0].text
+    
+    async def _generate_with_openai(self, user_message: str) -> str:
+        """Generate answer using OpenAI GPT."""
+        response = await self.openai_client.chat.completions.create(
+            model=self.model,
+            max_tokens=2000,
+            messages=[
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user", "content": user_message}
+            ],
+        )
+        return response.choices[0].message.content
     
     def _format_context(self, chunks: list[ContextChunk]) -> str:
         """Format context chunks for the prompt."""
@@ -248,7 +279,7 @@ Please synthesize an answer based on these sources."""
     
     def _parse_answer(self, content: str) -> dict:
         """
-        Parse Claude's response into structured sections.
+        Parse LLM response into structured sections.
         
         Args:
             content: Raw response text
