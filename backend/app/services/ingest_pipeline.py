@@ -33,6 +33,7 @@ from app.services.query_parser import QueryParser
 from app.services.literature.service import LiteratureService
 from app.services.chunking.service import ChunkingService
 from app.services.embedding.service import EmbeddingService
+from app.services.activity_stream import activity_stream
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,13 @@ class IngestPipeline:
                 await self._update_job(session, job_id, status="parsing")
                 logger.info(f"Job {job_id}: Starting query parsing")
                 
+                # Broadcast: Thinking
+                await activity_stream.thinking(
+                    f"Analyzing your query: \"{query[:60]}{'...' if len(query) > 60 else ''}\"",
+                    detail="Breaking down research concepts and keywords...",
+                    job_id=job_id
+                )
+                
                 parser = QueryParser()
                 parsed = parser.parse(query)
                 
@@ -124,18 +132,38 @@ class IngestPipeline:
                 )
                 
                 logger.info(f"Job {job_id}: Fetching from literature sources")
+                
+                # Broadcast: Searching
+                await activity_stream.searching(
+                    "Searching academic literature databases...",
+                    api_call="GET /openalex, GET /semantic_scholar",
+                    job_id=job_id
+                )
+                
                 literature = LiteratureService(session)
 
                 # Async progress callback
                 async def fetch_progress_callback(progress_data: dict):
+                    openalex = progress_data.get("openalex_found", 0)
+                    semantic = progress_data.get("semantic_scholar_found", 0)
+                    total = openalex + semantic
+                    
+                    # Broadcast: Fetching progress
+                    await activity_stream.fetching(
+                        f"Found {total} papers ({openalex} OpenAlex, {semantic} Semantic Scholar)...",
+                        articles_found=total,
+                        api_call="Retrieving paper metadata and abstracts",
+                        job_id=job_id
+                    )
+                    
                     await self._update_job(
                         session,
                         job_id,
                         progress=self._build_progress(
                             "fetching",
                             papers={
-                                "openalex_found": progress_data.get("openalex_found", 0),
-                                "semantic_scholar_found": progress_data.get("semantic_scholar_found", 0),
+                                "openalex_found": openalex,
+                                "semantic_scholar_found": semantic,
                                 "duplicates_removed": progress_data.get("duplicates_removed", 0),
                                 "unique_papers": progress_data.get("unique_papers", 0),
                                 "papers_stored": progress_data.get("papers_stored", 0),
@@ -167,6 +195,13 @@ class IngestPipeline:
                 }
 
                 logger.info(f"Job {job_id}: Stored {stats['total_stored']} papers")
+                
+                # Broadcast: Processing/storing
+                await activity_stream.processing(
+                    f"Deduplicating and storing {stats['total_stored']} unique papers...",
+                    detail=f"Removed {stats['duplicates_skipped']} duplicate entries",
+                    job_id=job_id
+                )
 
                 if stats.get("fetch_errors"):
                     logger.warning(f"Job {job_id}: Fetch errors: {stats['fetch_errors']}")
@@ -192,6 +227,13 @@ class IngestPipeline:
                 await self._update_job(session, job_id, status="chunking")
                 logger.info(f"Job {job_id}: Starting chunking")
                 
+                # Broadcast: Chunking
+                await activity_stream.processing(
+                    "Chunking paper abstracts into semantic segments...",
+                    detail="Creating searchable text passages",
+                    job_id=job_id
+                )
+                
                 chunker = ChunkingService(session)
                 chunk_stats = await chunker.chunk_papers_for_job(uuid.UUID(job_id))
                 chunks_created = chunk_stats.get("chunks_created", 0)
@@ -200,6 +242,13 @@ class IngestPipeline:
                     avg_per_paper = chunks_created / papers_progress["papers_stored"]
 
                 logger.info(f"Job {job_id}: Created {chunks_created} chunks")
+                
+                # Broadcast: Chunks created
+                await activity_stream.processing(
+                    f"Created {chunks_created} text chunks from {papers_progress['papers_stored']} papers",
+                    detail=f"Average {avg_per_paper:.1f} chunks per paper",
+                    job_id=job_id
+                )
 
                 await self._update_job(
                     session,
@@ -225,10 +274,26 @@ class IngestPipeline:
                 # ========== STAGE 4: EMBEDDING ==========
                 logger.info(f"Job {job_id}: Starting embedding")
                 
+                # Broadcast: Embedding start
+                await activity_stream.embedding(
+                    f"Generating vector embeddings for {chunks_created} chunks...",
+                    progress=0.0,
+                    job_id=job_id
+                )
+                
                 try:
                     embedder = EmbeddingService(session)
 
                     async def embed_progress_callback(done: int, total: int):
+                        percent = round((done / total) * 100, 1) if total else 0
+                        
+                        # Broadcast: Embedding progress
+                        await activity_stream.embedding(
+                            f"Generating vector embeddings... {percent}%",
+                            progress=percent / 100,
+                            job_id=job_id
+                        )
+                        
                         progress = self._build_progress(
                             "embedding",
                             papers=papers_progress,
@@ -239,7 +304,7 @@ class IngestPipeline:
                             embeddings={
                                 "completed": done,
                                 "total": total,
-                                "percent": round((done / total) * 100, 1) if total else 0,
+                                "percent": percent,
                             },
                             stages={
                                 "parsing": {"status": "completed"},
@@ -301,6 +366,13 @@ class IngestPipeline:
                 
                 logger.info(f"Job {job_id}: Completed in {elapsed_ms}ms")
                 
+                # Broadcast: Complete
+                await activity_stream.complete(
+                    f"Ingestion complete! Processed {papers_progress['papers_stored']} papers.",
+                    detail=f"Created {chunks_created} chunks with {embed_stats.get('embedded', 0)} embeddings in {elapsed_ms/1000:.1f}s",
+                    job_id=job_id
+                )
+                
                 return {
                     "job_id": job_id,
                     "status": "completed",
@@ -315,6 +387,13 @@ class IngestPipeline:
                 error_message = str(exc)
                 
                 logger.error(f"Job {job_id}: Failed with error: {error_message}", exc_info=True)
+                
+                # Broadcast: Error
+                await activity_stream.error(
+                    "Pipeline encountered an error",
+                    detail=error_message[:200],
+                    job_id=job_id
+                )
                 
                 await self._update_job(
                     session,

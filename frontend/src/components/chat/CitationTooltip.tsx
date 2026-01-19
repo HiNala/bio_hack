@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Source } from './AssistantResponse';
+import type { Source } from '@/lib/api';
 
 interface CitationTooltipProps {
   source: Source;
@@ -51,19 +51,33 @@ export function CitationTooltip({ source, children, onSourceClick }: CitationToo
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
         onClick={() => onSourceClick(source)}
-        className="cursor-pointer"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSourceClick(source);
+          }
+        }}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+        tabIndex={0}
+        role="button"
+        aria-label={`View source: ${source.title} by ${source.authors.slice(0, 2).join(', ')}`}
+        aria-describedby="citation-tooltip"
       >
         {children}
       </span>
 
       {isVisible && (
         <div
+          id="citation-tooltip"
           ref={tooltipRef}
           className="fixed z-[100] transform -translate-x-1/2 -translate-y-full pointer-events-none animate-fadeIn"
           style={{
             top: position.top,
             left: position.left,
           }}
+          role="tooltip"
         >
           <div
             className="max-w-xs p-3 rounded-lg"

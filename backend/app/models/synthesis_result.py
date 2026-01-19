@@ -52,6 +52,7 @@ class SynthesisResult(Base):
     
     # Relationships
     workspace = relationship("Workspace", back_populates="synthesis_results")
-    
+    session_queries = relationship("SessionQuery", back_populates="synthesis", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<SynthesisResult {self.mode}: {self.input_query[:30]}>"

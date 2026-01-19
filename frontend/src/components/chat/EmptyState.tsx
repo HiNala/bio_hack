@@ -29,22 +29,22 @@ const EXAMPLE_QUERIES = [
 
 export function EmptyState({ onExampleClick }: EmptyStateProps) {
   return (
-    <div className="max-w-xl mx-auto px-4 pt-12 pb-8 animate-fadeIn">
+    <div className="max-w-xl mx-auto px-4 pt-12 pb-8 animate-fadeIn" role="main" aria-label="Welcome to ScienceRAG">
       {/* Hero Icon - Scientific/Research themed */}
-      <div className="flex justify-center mb-8">
-        <div 
-          className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
+      <div className="flex justify-center mb-8" aria-hidden="true">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center relative animate-pulse-subtle"
           style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)' }}
         >
           {/* Microscope/Research icon */}
-          <svg 
-            className="w-8 h-8"
+          <svg
+            className="w-8 h-8 animate-orb-idle"
             style={{ color: 'var(--accent-blue)' }}
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
             strokeWidth="1.5"
-            strokeLinecap="round" 
+            strokeLinecap="round"
             strokeLinejoin="round"
           >
             <circle cx="12" cy="12" r="3" />
@@ -75,9 +75,9 @@ export function EmptyState({ onExampleClick }: EmptyStateProps) {
 
       {/* Method badges */}
       <div className="flex justify-center gap-2 mb-10 flex-wrap">
-        <MethodBadge icon="🔍" label="Multi-source search" />
-        <MethodBadge icon="📊" label="Evidence ranking" />
-        <MethodBadge icon="🔗" label="Citation linking" />
+        <MethodBadge icon="🔍" label="Multi-source search" delay="200ms" />
+        <MethodBadge icon="📊" label="Evidence ranking" delay="400ms" />
+        <MethodBadge icon="🔗" label="Citation linking" delay="600ms" />
       </div>
 
       {/* Example queries label */}
@@ -89,24 +89,29 @@ export function EmptyState({ onExampleClick }: EmptyStateProps) {
       </p>
 
       {/* Example Query Cards */}
-      <div className="space-y-3">
+      <div className="space-y-3" role="list" aria-label="Example research queries">
         {EXAMPLE_QUERIES.map((item, index) => (
           <button
             key={index}
             onClick={() => onExampleClick(item.query)}
-            className="w-full text-left p-4 rounded-xl border transition-all duration-200 group flex items-start gap-3"
+            className="w-full text-left p-4 rounded-xl border transition-all duration-200 group flex items-start gap-3 animate-slideUp"
             style={{
               backgroundColor: 'var(--bg-card)',
               borderColor: 'var(--border-light)',
+              animationDelay: `${index * 100}ms`,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--border-medium)';
               e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'var(--border-light)';
               e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.transform = 'translateY(0)';
             }}
+            role="listitem"
+            aria-label={`Try example query: ${item.query}`}
           >
             <QueryTypeIcon type={item.type} />
             <span 
@@ -140,14 +145,25 @@ export function EmptyState({ onExampleClick }: EmptyStateProps) {
   );
 }
 
-function MethodBadge({ icon, label }: { icon: string; label: string }) {
+function MethodBadge({ icon, label, delay }: { icon: string; label: string; delay?: string }) {
   return (
-    <span 
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
-      style={{ 
+    <span
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs animate-fadeIn transition-all duration-200"
+      style={{
         backgroundColor: 'var(--bg-card)',
         border: '1px solid var(--border-light)',
         color: 'var(--text-secondary)',
+        animationDelay: delay || '0ms',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+        e.currentTarget.style.borderColor = 'var(--border-medium)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+        e.currentTarget.style.borderColor = 'var(--border-light)';
+        e.currentTarget.style.transform = 'translateY(0)';
       }}
     >
       <span>{icon}</span>

@@ -1,0 +1,76 @@
+# ScienceRAG Development Docker Compose Override
+# Additional services and configurations for development
+
+services:
+  # Development database with additional tools
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: sciencerag
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./docker/dev-init.sql:/docker-entrypoint-initdb.d/dev-init.sql
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sciencerag-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sciencerag.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - sciencerag-network
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: sciencerag-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - sciencerag-network
+
+  # MailHog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: sciencerag-mailhog
+    ports:
+      - "1025:1025"   # SMTP server
+      - "8025:8025"   # Web interface
+    networks:
+      - sciencerag-network
+
+  # Development proxy for easier access
+  nginx-dev:
+    image: nginx:alpine
+    container_name: sciencerag-nginx-dev
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx-dev.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - sciencerag-network
+
+volumes:
+  pgadmin_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

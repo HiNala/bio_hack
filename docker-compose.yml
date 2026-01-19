@@ -1,5 +1,5 @@
 # ScienceRAG Docker Compose Configuration
-# Runs all services for local development
+# Runs all services for local development and production
 
 services:
   # PostgreSQL with pgvector extension
@@ -16,11 +16,40 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sciencerag -d sciencerag"]
-      interval: 5s
+      test: ["CMD", "pg_isready", "-U", "sciencerag", "-d", "sciencerag"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - sciencerag-network
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: sciencerag-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 60
+      --timeout 300
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./docker/redis.conf:/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
     networks:
       - sciencerag-network
 
@@ -35,20 +64,35 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql+asyncpg://sciencerag:sciencerag@postgres:5432/sciencerag
+      - REDIS_URL=redis://redis:6379/0
       - DEBUG=true
-      - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001","http://frontend:3000"]
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - backend_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
     networks:
       - sciencerag-network
 
@@ -60,23 +104,50 @@ services:
       target: dev
     container_name: sciencerag-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://backend:8000
       - WATCHPACK_POLLING=true
+      - NODE_ENV=development
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - frontend_logs:/app/logs
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
     networks:
       - sciencerag-network
 
 volumes:
   postgres_data:
     driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  frontend_logs:
+    driver: local
 
 networks:
   sciencerag-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

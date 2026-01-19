@@ -8,45 +8,41 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, Integer
 import math
 
 from app.database import get_db
 from app.models import Paper, SearchQuery
 from app.schemas import DocumentsResponse, PaperResponse
+from app.cache import cached
 
 router = APIRouter()
 
 
 @router.get("/documents/stats", tags=["Documents"])
+@cached(ttl_seconds=60)  # Cache for 1 minute
 async def get_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get statistics about stored papers.
     """
-    # Total papers
-    total_result = await db.execute(select(func.count(Paper.id)))
-    total = total_result.scalar_one()
-    
-    # Papers with abstracts
-    with_abstract_result = await db.execute(
-        select(func.count(Paper.id)).where(Paper.abstract.isnot(None))
+    # Single optimized query with conditional aggregations
+    result = await db.execute(
+        select(
+            func.count(Paper.id).label('total'),
+            func.count(func.nullif(Paper.abstract, None)).label('with_abstract'),
+            func.sum(func.cast(Paper.is_chunked, Integer)).label('chunked'),
+            func.sum(func.cast(Paper.is_embedded, Integer)).label('embedded'),
+        )
     )
-    with_abstract = with_abstract_result.scalar_one()
-    
-    # Chunked papers
-    chunked_result = await db.execute(
-        select(func.count(Paper.id)).where(Paper.is_chunked == True)
-    )
-    chunked = chunked_result.scalar_one()
-    
-    # Embedded papers
-    embedded_result = await db.execute(
-        select(func.count(Paper.id)).where(Paper.is_embedded == True)
-    )
-    embedded = embedded_result.scalar_one()
-    
+    row = result.first()
+
+    total = row.total or 0
+    with_abstract = row.with_abstract or 0
+    chunked = row.chunked or 0
+    embedded = row.embedded or 0
+
     return {
         "total_papers": total,
         "papers_with_abstracts": with_abstract,

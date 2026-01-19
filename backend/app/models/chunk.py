@@ -62,6 +62,11 @@ class Chunk(Base):
 
     # Relationships
     paper: Mapped["Paper"] = relationship("Paper", back_populates="chunks")
+    claim_evidence: Mapped[list["ClaimEvidence"]] = relationship(
+        "ClaimEvidence",
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Chunk(paper_id='{self.paper_id}', index={self.chunk_index})>"

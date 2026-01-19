@@ -5,11 +5,20 @@ Main FastAPI application entry point.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import init_db
+from app.errors import handle_exception
+from app.logging import setup_logging
+from app.security import setup_security_middleware
+from app.middleware.security import SecurityHeadersMiddleware
+import logging
+
+logger = logging.getLogger(__name__)
+
 from app.routes import (
     health_router,
     analyze_router,
@@ -23,7 +32,14 @@ from app.routes import (
     settings_router,
     workspaces_router,
     synthesis_router,
+    claims_router,
+    contradictions_router,
+    memory_router,
+    metrics_router,
+    export_router,
+    uploads_router,
 )
+from app.routes.activity import router as activity_router
 
 settings = get_settings()
 
@@ -32,12 +48,11 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    print(f"Starting {settings.app_name} v{settings.app_version}")
+    setup_logging()
     await init_db()
-    print("Database initialized")
-    
+
     yield
-    
+
     # Shutdown
     print("Shutting down...")
 
@@ -50,6 +65,58 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Setup security middleware
+app = setup_security_middleware(app)
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all HTTP requests."""
+    import time
+    start_time = time.time()
+
+    # Log request
+    logger.info(
+        f"Request: {request.method} {request.url.path}",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "query_params": str(request.url.query),
+            "user_agent": request.headers.get("user-agent", ""),
+            "client_ip": request.client.host if request.client else None,
+        }
+    )
+
+    # Process request
+    response = await call_next(request)
+
+    # Calculate processing time
+    process_time = time.time() - start_time
+
+    # Log response
+    logger.info(
+        f"Response: {response.status_code} in {process_time:.3f}s",
+        extra={
+            "status_code": response.status_code,
+            "process_time": process_time,
+            "path": request.url.path,
+        }
+    )
+
+    return response
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all uncaught exceptions with standardized responses."""
+    return JSONResponse(
+        status_code=handle_exception(exc).status_code,
+        content=handle_exception(exc).detail
+    )
 
 # CORS middleware
 app.add_middleware(
@@ -73,6 +140,13 @@ app.include_router(embed_router)
 app.include_router(settings_router)
 app.include_router(workspaces_router)
 app.include_router(synthesis_router)
+app.include_router(claims_router)
+app.include_router(contradictions_router)
+app.include_router(memory_router)
+app.include_router(metrics_router)
+app.include_router(export_router)
+app.include_router(uploads_router)
+app.include_router(activity_router)
 
 
 @app.get("/", tags=["System"])

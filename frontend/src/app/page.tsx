@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense, memo } from 'react';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
+import { useAgentActivityStream } from '@/hooks/useAgentActivityStream';
 import {
   Header,
   FloatingInput,
-  EmptyState,
   UserMessage,
-  AssistantResponse,
   LoadingState,
   LiveStatsSidebar,
   SettingsPanel,
@@ -15,8 +15,16 @@ import {
   type Source,
   type ProgressStep,
   type LiveStats,
+  type AgentActivity,
 } from '@/components/chat';
-import { api, type IngestJobStatusResponse, type RAGResponse } from '@/lib/api';
+import { api, type IngestJobStatusResponse, type RAGResponse, ragCitationsToSources } from '@/lib/api';
+import { MessageSkeleton } from '@/components/LoadingSkeleton';
+
+// Lazy load components that are not immediately needed
+const EmptyState = lazy(() => import('@/components/chat/EmptyState').then(module => ({ default: module.EmptyState })));
+const AssistantResponse = lazy(() => import('@/components/chat/AssistantResponse').then(module => ({ default: module.AssistantResponse })));
+const LoadingStateComponent = lazy(() => import('@/components/chat/LoadingState').then(module => ({ default: module.LoadingState })));
+const LiveStatsSidebarComponent = lazy(() => import('@/components/chat/LiveStatsSidebar').then(module => ({ default: module.LiveStatsSidebar })));
 
 interface Message {
   id: string;
@@ -37,12 +45,14 @@ interface Message {
   };
 }
 
-export default function Home() {
+const Home = memo(function Home() {
+  const { trackInteraction } = usePerformanceMonitor('HomePage');
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [isSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Start with sidebar open to show agent activity
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [currentQuery, setCurrentQuery] = useState<string>('');
@@ -56,6 +66,30 @@ export default function Home() {
     lastUpdate: null,
   });
   
+  // Use SSE stream for real-time agent activity updates
+  const {
+    activity: streamActivity,
+    recentActivities: streamRecentActivities,
+    isConnected: isActivityStreamConnected,
+  } = useAgentActivityStream({
+    enabled: true,
+    onActivity: (activity) => {
+      // Update local activity state from stream
+      console.log('[AgentActivity] Received:', activity.type, activity.message);
+    },
+  });
+  
+  // Local activity state for manual updates (fallback when stream is not available)
+  const [localAgentActivity, setLocalAgentActivity] = useState<AgentActivity>({
+    type: 'idle',
+    message: 'Ready to explore the scientific literature...',
+  });
+  const [localRecentActivities, setLocalRecentActivities] = useState<AgentActivity[]>([]);
+  
+  // Use stream activity if connected, otherwise use local state
+  const agentActivity = isActivityStreamConnected ? streamActivity : localAgentActivity;
+  const recentActivities = isActivityStreamConnected ? streamRecentActivities : localRecentActivities;
+  
   const conversationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<{ focus: () => void } | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,18 +99,74 @@ export default function Home() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K: Focus input
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         inputRef.current?.focus();
       }
-      if (e.key === 'Escape' && isSettingsOpen) {
-        setIsSettingsOpen(false);
+
+      // Escape: Close settings or sidebar
+      if (e.key === 'Escape') {
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+        } else if (isSidebarOpen) {
+          setIsSidebarOpen(false);
+        }
+      }
+
+      // Cmd/Ctrl + B: Toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+
+      // Cmd/Ctrl + ,: Open settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen(prev => !prev);
+      }
+
+      // Tab navigation improvements
+      if (e.key === 'Tab') {
+        const activeElement = document.activeElement as Element | null;
+        const focusableElements = document.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (activeElement) {
+          if (e.shiftKey) {
+            // Shift+Tab: move to previous
+            const currentIndex = Array.from(focusableElements).indexOf(activeElement);
+            const prevIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            (focusableElements[prevIndex] as HTMLElement)?.focus();
+          } else {
+            // Tab: move to next
+            const currentIndex = Array.from(focusableElements).indexOf(activeElement);
+            const nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+            (focusableElements[nextIndex] as HTMLElement)?.focus();
+          }
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, isSidebarOpen]);
+
+  // Helper to update agent activity with history tracking (local fallback)
+  const updateAgentActivity = useCallback((activity: AgentActivity) => {
+    setLocalAgentActivity(activity);
+    if (activity.type !== 'idle') {
+      setLocalRecentActivities(prev => [...prev.slice(-19), { ...activity, timestamp: new Date() }]);
+    }
+  }, []);
+
+  // Memoize expensive computations
+  const hasMessages = useMemo(() => messages.length > 0, [messages.length]);
+  const isProcessing = useMemo(() =>
+    liveStats.processingStatus !== 'idle' && liveStats.processingStatus !== 'ready',
+    [liveStats.processingStatus]
+  );
 
   // Fetch stats
   const fetchStats = useCallback(async () => {
@@ -121,9 +211,23 @@ export default function Home() {
       setCurrentMessage('Synthesizing answer from papers...');
       setProgressSteps(prev => [...prev, { id: 'synthesis', label: 'Synthesizing answer', status: 'active' }]);
 
+      updateAgentActivity({
+        type: 'synthesizing',
+        message: '🧠 Synthesizing comprehensive answer from retrieved papers...',
+        detail: `Analyzing ${sources.length} relevant sources for insights and consensus`,
+        apiCall: 'POST /api/rag/ask',
+        articlesFound: sources.length,
+      });
+
       const ragResponse: RAGResponse = await api.askRAG(question, 10);
 
       setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'completed' } : s));
+      
+      updateAgentActivity({
+        type: 'complete',
+        message: '✅ Analysis complete! Here\'s what I discovered in the literature.',
+        detail: `Synthesized insights from ${ragResponse.papers_analyzed || sources.length} papers with evidence-based conclusions`,
+      });
 
       let content = ragResponse.summary || '';
       
@@ -174,6 +278,12 @@ export default function Home() {
       console.error('RAG synthesis failed:', err);
       setProgressSteps(prev => prev.map(s => s.id === 'synthesis' ? { ...s, status: 'error' } : s));
       
+      updateAgentActivity({
+        type: 'error',
+        message: 'Synthesis temporarily unavailable',
+        detail: 'Papers are stored and searchable. Try exploring them directly.',
+      });
+      
       return {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -206,6 +316,13 @@ export default function Home() {
       { id: 'embedding', label: 'Generating vectors', status: 'pending' },
     ]);
 
+    // Start agent activity tracking
+    updateAgentActivity({
+      type: 'thinking',
+      message: `🔍 Analyzing your query: "${query.slice(0, 60)}${query.length > 60 ? '...' : ''}"`,
+      detail: 'Breaking down research concepts and keywords...',
+    });
+
     setLiveStats(prev => ({
       ...prev,
       processingStatus: 'searching',
@@ -233,10 +350,23 @@ export default function Home() {
       setCurrentJobId(startResponse.job_id);
       setCurrentMessage('Searching literature databases...');
       setLiveStats(prev => ({ ...prev, processingStatus: 'searching' }));
+      
+      updateAgentActivity({
+        type: 'searching',
+        message: '🔎 Searching academic literature databases...',
+        detail: 'Querying OpenAlex and Semantic Scholar for relevant papers',
+        apiCall: 'GET /api/openalex, GET /api/semantic_scholar',
+      });
     } catch (err) {
       console.error('Error processing query:', err);
       
       showError('Search failed', err instanceof Error ? err.message : 'Unknown error occurred');
+
+      updateAgentActivity({
+        type: 'error',
+        message: 'Search failed to start',
+        detail: err instanceof Error ? err.message : 'Unknown error occurred',
+      });
 
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -291,6 +421,42 @@ export default function Home() {
               elapsedMs: status.elapsed_time_ms,
             },
           }));
+
+          // Update agent activity based on current stage
+          const stages = status.progress?.stages;
+          if (stages?.fetching?.status === 'in_progress') {
+            updateAgentActivity({
+              type: 'fetching',
+              message: `Found ${progress.papers.openalex_found} papers from OpenAlex, ${progress.papers.semantic_scholar_found} from Semantic Scholar...`,
+              detail: 'Retrieving paper metadata and abstracts',
+              apiCall: 'GET /api/literature/search',
+              articlesFound: progress.papers.openalex_found + progress.papers.semantic_scholar_found,
+            });
+          } else if (stages?.storing?.status === 'in_progress') {
+            updateAgentActivity({
+              type: 'processing',
+              message: `🧹 Deduplicating and storing ${progress.papers.papers_stored} unique papers...`,
+              detail: `Removed ${progress.papers.duplicates_removed || 0} duplicate entries`,
+              apiCall: 'POST /api/papers/batch',
+            });
+          } else if (stages?.chunking?.status === 'in_progress') {
+            updateAgentActivity({
+              type: 'processing',
+              message: `✂️ Chunking paper abstracts into semantic segments...`,
+              detail: `Created ${progress.chunks.total_created} text chunks so far`,
+              apiCall: 'POST /api/chunk/all',
+            });
+          } else if (stages?.embedding?.status === 'in_progress') {
+            const embeddingProgress = progress.embeddings.total > 0
+              ? Math.round((progress.embeddings.completed / progress.embeddings.total) * 100)
+              : 0;
+            updateAgentActivity({
+              type: 'embedding',
+              message: `🧠 Generating vector embeddings... ${embeddingProgress}%`,
+              detail: `${progress.embeddings.completed} of ${progress.embeddings.total} chunks embedded`,
+              apiCall: 'POST /api/embed/batch (text-embedding-3-small)',
+            });
+          }
         }
 
         if (status.status === 'completed' || status.status === 'failed') {
@@ -330,6 +496,12 @@ export default function Home() {
           } else {
             showError('Ingestion failed', status.error?.message || 'Unknown error');
             
+            updateAgentActivity({
+              type: 'error',
+              message: 'Pipeline encountered an error',
+              detail: status.error?.message || 'Unknown error occurred',
+            });
+            
             const errorMessage: Message = {
               id: (Date.now() + 1).toString(),
               type: 'assistant',
@@ -346,6 +518,14 @@ export default function Home() {
           setCurrentQuery('');
           setLiveStats(prev => ({ ...prev, processingStatus: 'idle', currentSearch: undefined }));
           fetchStats();
+          
+          // Reset agent activity to idle after a brief delay
+          setTimeout(() => {
+            setLocalAgentActivity({
+              type: 'idle',
+              message: 'Ready to explore the scientific literature...',
+            });
+          }, 3000);
         }
       } catch (err) {
         console.error('Polling failed:', err);
@@ -358,7 +538,7 @@ export default function Home() {
     return () => {
       if (jobPollIntervalRef.current) clearInterval(jobPollIntervalRef.current);
     };
-  }, [currentJobId, currentQuery, generateRAGSynthesis, showError, showSuccess, showInfo, fetchStats]);
+  }, [currentJobId, currentQuery, generateRAGSynthesis, showError, showSuccess, showInfo, fetchStats, updateAgentActivity]);
 
   const handleExampleClick = (query: string) => {
     handleSubmit(query);
@@ -385,8 +565,6 @@ export default function Home() {
     setIsSettingsOpen(!isSettingsOpen);
   };
 
-  const hasMessages = messages.length > 0;
-
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       {/* Toast notifications */}
@@ -407,14 +585,17 @@ export default function Home() {
 
       {/* Main content area */}
       <main
-        className="pt-16 pb-40 transition-all duration-300"
+        id="main-content"
+        className="pt-16 pb-40 transition-all duration-300 relative md:mr-0"
         style={{
           marginRight: isSidebarOpen ? '320px' : '0',
         }}
+        role="main"
+        aria-label="Research conversation and results"
       >
         <div
           ref={conversationRef}
-          className="max-w-2xl mx-auto px-6 py-8 overflow-y-auto"
+          className="max-w-2xl mx-auto px-4 sm:px-6 py-8 overflow-y-auto"
           style={{ maxHeight: 'calc(100vh - 200px)' }}
         >
           {!hasMessages && !isLoading ? (
@@ -441,10 +622,12 @@ export default function Home() {
               ))}
 
               {isLoading && (
-                <LoadingState
-                  steps={progressSteps}
-                  currentMessage={currentMessage}
-                />
+                <Suspense fallback={<MessageSkeleton />}>
+                  <LoadingStateComponent
+                    steps={progressSteps}
+                    currentMessage={currentMessage}
+                  />
+                </Suspense>
               )}
             </div>
           )}
@@ -460,13 +643,21 @@ export default function Home() {
       />
 
       {/* Live stats sidebar */}
-      <LiveStatsSidebar
-        stats={liveStats}
-        isOpen={isSidebarOpen}
-      />
+      <Suspense fallback={null}>
+        <LiveStatsSidebarComponent
+          stats={liveStats}
+          isOpen={isSidebarOpen}
+          agentActivity={agentActivity}
+          recentActivities={recentActivities}
+        />
+      </Suspense>
     </div>
   );
-}
+});
+
+Home.displayName = 'Home';
+
+export default Home;
 
 function mapStage(status?: string): 'pending' | 'active' | 'completed' | 'error' {
   switch (status) {

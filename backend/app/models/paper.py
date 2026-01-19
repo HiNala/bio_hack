@@ -88,6 +88,11 @@ class Paper(Base):
         back_populates="paper",
         cascade="all, delete-orphan",
     )
+    claim_evidence: Mapped[list["ClaimEvidence"]] = relationship(
+        "ClaimEvidence",
+        back_populates="paper",
+        cascade="all, delete-orphan",
+    )
 
     # Constraints
     __table_args__ = (

@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -20,6 +21,7 @@ export function Header({ onToggleSettings }: HeaderProps) {
       <div className="h-full max-w-screen-2xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2.5">
+          <ThemeToggle />
           <Image 
             src="/logo.png"
             alt="ScienceRAG Logo"
@@ -36,8 +38,10 @@ export function Header({ onToggleSettings }: HeaderProps) {
           </span>
         </div>
 
-        {/* Settings button */}
-        <button
+        {/* Theme toggle and settings */}
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <button
           onClick={onToggleSettings}
           className="p-2.5 rounded-lg transition-all duration-200"
           style={{ color: 'var(--text-tertiary)' }}
@@ -69,7 +73,8 @@ export function Header({ onToggleSettings }: HeaderProps) {
               d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" 
             />
           </svg>
-        </button>
+          </button>
+        </div>
       </div>
     </header>
   );

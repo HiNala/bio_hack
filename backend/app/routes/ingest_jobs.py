@@ -25,16 +25,22 @@ from app.schemas.ingest_job import (
     IngestJobError,
 )
 from app.services.ingest_pipeline import IngestPipeline
+from app.errors import ValidationError, NotFoundError
+from app.security import limiter, InputValidation
 
 router = APIRouter(prefix="/api/ingest", tags=["Ingest Jobs"])
 
 
 @router.post("", response_model=IngestJobCreateResponse, status_code=202)
+@limiter.limit("5/minute")
 async def start_ingest_job(
     request: IngestJobCreateRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
+    # Validate and sanitize input
+    request.query = InputValidation.sanitize_query(request.query)
+
     job = IngestJob(
         id=uuid.uuid4(),
         status="pending",
@@ -88,12 +94,12 @@ async def get_ingest_job_status(
     try:
         job_uuid = uuid.UUID(job_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id format")
+        raise ValidationError("Invalid job_id format", "job_id")
 
     result = await db.execute(select(IngestJob).where(IngestJob.id == job_uuid))
     job = result.scalar_one_or_none()
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError("IngestJob", job_id)
 
     elapsed_ms = None
     if job.processing_time_ms is not None:
@@ -155,7 +161,7 @@ async def get_job_papers(
     try:
         job_uuid = uuid.UUID(job_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id format")
+        raise ValidationError("Invalid job_id format", "job_id")
 
     count_stmt = select(func.count(Paper.id)).where(Paper.ingest_job_id == job_uuid)
     total = await db.scalar(count_stmt) or 0

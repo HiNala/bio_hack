@@ -13,6 +13,8 @@ from app.database import get_db
 from app.schemas import SearchRequest, SearchResponse, SearchResult
 from app.services.search import SearchService
 from app.config import get_settings
+from app.errors import ConfigurationError, ValidationError
+from app.utils.validation import validate_search_query
 
 router = APIRouter()
 settings = get_settings()
@@ -63,21 +65,18 @@ async def semantic_search(
     Returns deduplicated results (one chunk per paper).
     """
     if not settings.openai_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI API key not configured for query embedding."
-        )
-    
+        raise ConfigurationError("OpenAI API", "API key not configured for query embedding")
+
+    # Validate and sanitize search query
+    request.query = validate_search_query(request.query)
+
     service = SearchService(db)
-    
-    try:
-        results = await service.search(
-            query=request.query,
-            top_k=request.limit,
-            dedupe_papers=True,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+    results = await service.search(
+        query=request.query,
+        top_k=request.limit,
+        dedupe_papers=True,
+    )
     
     return SearchResponse(
         results=[

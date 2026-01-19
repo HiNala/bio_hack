@@ -1,5 +1,8 @@
 'use client';
 
+import { memo } from 'react';
+import { AgentActivityCard, type AgentActivity } from './AgentActivityCard';
+
 export interface LiveStats {
   totalPapers: number;
   totalChunks: number;
@@ -30,9 +33,11 @@ export interface LiveStats {
 interface LiveStatsSidebarProps {
   stats: LiveStats;
   isOpen: boolean;
+  agentActivity?: AgentActivity;
+  recentActivities?: AgentActivity[];
 }
 
-export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
+const LiveStatsSidebar = memo(function LiveStatsSidebar({ stats, isOpen, agentActivity, recentActivities }: LiveStatsSidebarProps) {
   if (!isOpen) return null;
 
   const embeddingPercent = stats.totalChunks > 0 
@@ -41,14 +46,22 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
 
   const isProcessing = stats.processingStatus !== 'idle' && stats.processingStatus !== 'ready';
 
+  // Default idle activity if none provided
+  const currentActivity: AgentActivity = agentActivity || {
+    type: 'idle',
+    message: 'Ready to explore the scientific literature...',
+  };
+
   return (
     <aside
-      className="fixed right-0 top-16 bottom-0 w-80 z-40 overflow-hidden flex flex-col"
+      className="fixed right-0 top-16 bottom-0 w-80 z-40 overflow-hidden flex flex-col md:w-80 sm:w-full"
       style={{
         backgroundColor: 'var(--bg-card)',
         borderLeft: '1px solid var(--border-subtle)',
         boxShadow: 'var(--shadow-sidebar)',
       }}
+      role="complementary"
+      aria-label="System status and knowledge base statistics"
     >
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
@@ -128,7 +141,7 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
 
         {/* KNOWLEDGE BASE Section */}
         <section>
-          <SectionHeader 
+          <SectionHeader
             title="Knowledge Base"
             icon={
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -137,8 +150,8 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
             }
           />
           <div className="grid grid-cols-2 gap-4 mt-4">
-            <StatCard label="Papers" value={stats.totalPapers} />
-            <StatCard label="Chunks" value={stats.totalChunks} />
+            <StatCard label="Papers" value={stats.totalPapers} isLoading={stats.lastUpdate === null} />
+            <StatCard label="Chunks" value={stats.totalChunks} isLoading={stats.lastUpdate === null} />
           </div>
           
           {/* Embedding progress */}
@@ -194,12 +207,13 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
             <PipelineStep number={7} text="Synthesize answer with citations" />
           </div>
         </section>
+
       </div>
 
       {/* Footer with timestamp */}
       {stats.lastUpdate && (
-        <div 
-          className="px-6 py-4 border-t"
+        <div
+          className="px-6 py-3 border-t"
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           <p className="text-xs text-center" style={{ color: 'var(--text-tertiary)' }}>
@@ -207,9 +221,21 @@ export function LiveStatsSidebar({ stats, isOpen }: LiveStatsSidebarProps) {
           </p>
         </div>
       )}
+
+      {/* Agent Activity Card - Fixed at bottom */}
+      <div className="flex-shrink-0 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+        <AgentActivityCard
+          activity={currentActivity}
+          recentActivities={recentActivities || []}
+        />
+      </div>
     </aside>
   );
-}
+});
+
+LiveStatsSidebar.displayName = 'LiveStatsSidebar';
+
+export { LiveStatsSidebar };
 
 // Section header component
 function SectionHeader({ title, icon }: { title: string; icon?: React.ReactNode }) {
@@ -286,12 +312,20 @@ function StatusIndicator({ status }: { status: LiveStats['processingStatus'] }) 
 }
 
 // Stat card component
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, isLoading = false }: { label: string; value: number; isLoading?: boolean }) {
   return (
-    <div 
-      className="p-3 rounded-xl"
+    <div
+      className="p-3 rounded-xl relative overflow-hidden"
       style={{ backgroundColor: 'var(--bg-page)' }}
     >
+      {isLoading && (
+        <div
+          className="absolute inset-0 animate-shimmer"
+          style={{
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+          }}
+        />
+      )}
       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
         {label}
       </p>

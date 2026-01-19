@@ -16,6 +16,8 @@ from app.schemas.synthesis import (
 from app.services.synthesis import SynthesisService
 from app.services.settings_service import SettingsService
 from app.services.collection_service import CollectionService
+from app.services.intelligence.enhanced_synthesis import EnhancedSynthesisService
+from app.services.embedding.service import EmbeddingService
 
 router = APIRouter(prefix="/synthesis", tags=["synthesis"])
 
@@ -76,14 +78,20 @@ async def create_synthesis(
         collection_service = CollectionService(db)
         workspace = await collection_service.get_or_create_default_workspace(user_id)
         request.workspace_id = workspace.id
-    
-    # Generate synthesis
-    synthesis_service = SynthesisService(db)
-    
-    return await synthesis_service.synthesize(
-        request=request,
+
+    # Generate enhanced synthesis with intelligence features
+    embedding_service = EmbeddingService(db)
+    synthesis_service = EnhancedSynthesisService(
+        db=db,
+        embedding_service=embedding_service
+    )
+
+    return await synthesis_service.synthesize_with_intelligence(
         user_id=user_id,
-        user_settings=user_settings
+        workspace_id=str(request.workspace_id),
+        query=request.query,
+        mode=request.mode,
+        settings_override=request.settings_override
     )
 
 

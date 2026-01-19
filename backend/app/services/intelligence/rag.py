@@ -6,6 +6,7 @@ Retrieval-Augmented Generation for synthesizing answers from scientific literatu
 
 import json
 import re
+import logging
 from typing import Optional
 from dataclasses import dataclass
 
@@ -14,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.services.search import SearchService, SearchResult
 from app.services.intelligence.query_parser import QueryParser
+from app.services.activity_stream import activity_stream
 from app.schemas import RAGResponse, Citation
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,35 +108,58 @@ IMPORTANT RULES:
     ) -> RAGResponse:
         """
         Answer a research question using RAG.
-        
+
         Args:
             question: Research question
             top_k: Number of chunks to retrieve
             use_llm_parsing: Whether to use LLM for query parsing
-            
+
         Returns:
             RAGResponse with synthesized answer and citations
         """
+        logger.info(f"Starting RAG synthesis for question: {question[:100]}...")
         top_k = top_k or settings.context_top_n
+        
+        # Broadcast: Thinking
+        await activity_stream.thinking(
+            f"Analyzing your question: \"{question[:60]}{'...' if len(question) > 60 else ''}\"",
+            detail="Breaking down research concepts and keywords..."
+        )
         
         # Step 1: Parse query (optional LLM enhancement)
         search_query = question
         if use_llm_parsing:
             try:
+                await activity_stream.thinking(
+                    "Parsing query for optimal search terms...",
+                    detail="Identifying key concepts and relationships"
+                )
                 parsed_query = await self.query_parser.parse(question)
                 if parsed_query.get("primary_terms"):
                     search_query = " ".join(parsed_query["primary_terms"])
             except Exception:
                 pass
         
+        # Broadcast: Searching
+        await activity_stream.searching(
+            "Searching knowledge base for relevant passages...",
+            api_call="POST /search (vector similarity)"
+        )
+        
         # Step 2: Search for relevant chunks
+        logger.info(f"Searching for chunks with query: '{search_query}' (top_k={top_k})")
         search_results = await self.search_service.search(
             query=search_query,
             top_k=top_k * 2,  # Fetch extra to ensure diversity
             dedupe_papers=True,
         )
-        
+
         if not search_results:
+            logger.warning(f"No search results found for query: {question[:100]}")
+            await activity_stream.error(
+                "No relevant papers found",
+                detail="Try rephrasing or broadening your search"
+            )
             return RAGResponse(
                 query_id="",
                 summary="No relevant papers found for this query. Try rephrasing or broadening your search.",
@@ -143,13 +169,37 @@ IMPORTANT RULES:
                 citations=[],
                 papers_analyzed=0,
             )
+
+        logger.info(f"Found {len(search_results)} search results, using top {top_k}")
         
+        # Broadcast: Found papers
+        await activity_stream.fetching(
+            f"Found {len(search_results)} relevant passages from the literature",
+            articles_found=len(search_results),
+            api_call="Vector similarity search complete"
+        )
+
         # Step 3: Build context
         context_chunks = self._build_context(search_results[:top_k])
+        logger.info(f"Built context from {len(context_chunks)} chunks")
         
+        # Broadcast: Processing
+        await activity_stream.processing(
+            f"Assembling context from {len(context_chunks)} text passages...",
+            detail=f"Preparing {len(set(c.paper_id for c in context_chunks))} unique papers for synthesis"
+        )
+
         # Step 4: Generate answer
-        answer = await self._generate_answer(question, context_chunks)
+        logger.info("Generating AI synthesis...")
         
+        # Broadcast: Synthesizing
+        await activity_stream.synthesizing(
+            "Crafting comprehensive synthesis from the literature...",
+            detail="Analyzing evidence, identifying consensus, and formulating response"
+        )
+        
+        answer = await self._generate_answer(question, context_chunks)
+
         # Step 5: Build citations
         citations = [
             Citation(
@@ -161,6 +211,14 @@ IMPORTANT RULES:
             )
             for chunk in context_chunks
         ]
+
+        logger.info(f"RAG synthesis complete: {len(citations)} citations, {len(context_chunks)} chunks analyzed")
+        
+        # Broadcast: Complete
+        await activity_stream.complete(
+            f"Analysis complete! Synthesized insights from {len(context_chunks)} papers.",
+            detail=f"Generated {len(answer.get('key_findings', []))} key findings with {len(citations)} citations"
+        )
         
         return RAGResponse(
             query_id="",  # Will be set by caller

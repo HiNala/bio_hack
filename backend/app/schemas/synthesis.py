@@ -187,7 +187,10 @@ class SynthesisResponse(BaseModel):
     # Quality indicators
     confidence_score: Optional[float] = None
     coverage_warning: Optional[str] = None
-    
+
+    # Intelligence features (optional - only present with enhanced synthesis)
+    intelligence_features: Optional[Dict[str, Any]] = None  # Claims, contradictions, memory info
+
     class Config:
         from_attributes = True
 

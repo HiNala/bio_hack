@@ -1,63 +1,104 @@
 # ScienceRAG Frontend Dockerfile
-# Next.js application with hot reload for development
+# Multi-stage Next.js build with optimized caching
 
 FROM node:20-alpine AS base
 
-# Install dependencies only when needed
+# Metadata
+LABEL maintainer="ScienceRAG Team"
+LABEL description="Next.js frontend for ScienceRAG"
+
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Set environment
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Dependencies stage (production only)
 FROM base AS deps
 WORKDIR /app
 
 # Copy package files
 COPY frontend/package.json frontend/package-lock.json* ./
 
-# Install dependencies
-RUN npm ci
+# Install production dependencies only
+RUN \
+  if [ -f package-lock.json ]; then npm ci --only=production; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
 
-# Development image with hot reload
+# Development dependencies stage
+FROM base AS deps-dev
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install ALL dependencies (including devDependencies like typescript)
+RUN \
+  if [ -f package-lock.json ]; then npm ci; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
+
+# Development stage
 FROM base AS dev
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY frontend/ .
+# Create non-root user BEFORE copying files
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Expose port
+# Copy dependencies with correct ownership
+COPY --from=deps-dev --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --chown=nextjs:nodejs frontend/ .
+
+# Set development environment
+ENV NODE_ENV=development
+
+USER nextjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
 EXPOSE 3000
 
-# Set environment
-ENV NODE_ENV=development
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Start development server with hot reload
 CMD ["npm", "run", "dev"]
 
-# Production build stage
+# Build stage
 FROM base AS builder
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
+# Copy ALL dependencies (need devDependencies like typescript for build)
+COPY --from=deps-dev /app/node_modules ./node_modules
 COPY frontend/ .
 
+# Set production environment for build
+ENV NODE_ENV=production
+
 # Build application
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Production image
+# Production stage
 FROM base AS production
 WORKDIR /app
 
+# Set production environment
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built application
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
 EXPOSE 3000
 

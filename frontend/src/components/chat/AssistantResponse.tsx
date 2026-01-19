@@ -2,17 +2,7 @@
 
 import { useState } from 'react';
 import { CitationTooltip } from './CitationTooltip';
-
-export interface Source {
-  citationId: number;
-  paperId: string;
-  title: string;
-  authors: string[];
-  year: number | null;
-  venue: string | null;
-  doi: string | null;
-  url: string | null;
-}
+import type { Source } from '@/lib/api';
 
 interface AssistantResponseProps {
   content: string;
@@ -45,12 +35,14 @@ export function AssistantResponse({
     <div className="animate-fadeIn space-y-6">
       {/* Tool Activity Panel (Research Trace) */}
       {toolActivity && (
-        <div 
+        <div
           className="p-4 rounded-xl border"
-          style={{ 
+          style={{
             backgroundColor: 'var(--bg-card)',
             borderColor: 'var(--border-light)',
           }}
+          role="region"
+          aria-label="Research activity summary"
         >
           <h4 
             className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2"

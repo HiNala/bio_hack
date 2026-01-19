@@ -94,6 +94,11 @@ export const FloatingInput = forwardRef<{ focus: () => void }, FloatingInputProp
                 minHeight: '24px',
                 maxHeight: '120px',
               }}
+              aria-label="Research query input"
+              aria-describedby="input-help"
+              aria-expanded={isFocused}
+              role="textbox"
+              aria-multiline={true}
             />
 
             {/* Orb indicator */}
@@ -136,6 +141,7 @@ export const FloatingInput = forwardRef<{ focus: () => void }, FloatingInputProp
 
         {/* Helper text */}
         <p
+          id="input-help"
           className="text-center mt-3 text-xs transition-opacity duration-200"
           style={{
             color: 'var(--text-tertiary)',

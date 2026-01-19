@@ -58,6 +58,28 @@ from app.schemas.synthesis import (
     SourceReference,
     SavedQueryResponse,
 )
+from app.schemas.claim import (
+    ClaimResponse,
+    ClaimEvidenceMap,
+    ClaimExtractionRequest,
+    ClaimExtractionResponse,
+    ClaimSearchRequest,
+    ClaimSearchResponse,
+)
+from app.schemas.contradiction import (
+    ContradictionResponse,
+    ConsensusReport,
+    ConsensusReportRequest,
+    ConsensusReportResponse,
+)
+from app.schemas.memory import (
+    ResearchSessionResponse,
+    SessionTimeline,
+    SessionDetectionRequest,
+    SessionDetectionResponse,
+    ContextRetrievalRequest,
+    ContextRetrievalResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -102,4 +124,21 @@ __all__ = [
     "SynthesisFeedback",
     "SourceReference",
     "SavedQueryResponse",
+    # Core Intelligence
+    "ClaimResponse",
+    "ClaimEvidenceMap",
+    "ClaimExtractionRequest",
+    "ClaimExtractionResponse",
+    "ClaimSearchRequest",
+    "ClaimSearchResponse",
+    "ContradictionResponse",
+    "ConsensusReport",
+    "ConsensusReportRequest",
+    "ConsensusReportResponse",
+    "ResearchSessionResponse",
+    "SessionTimeline",
+    "SessionDetectionRequest",
+    "SessionDetectionResponse",
+    "ContextRetrievalRequest",
+    "ContextRetrievalResponse",
 ]

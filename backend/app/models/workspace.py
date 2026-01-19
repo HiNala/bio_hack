@@ -44,6 +44,7 @@ class Workspace(Base):
     collections = relationship("Collection", back_populates="workspace", cascade="all, delete-orphan")
     saved_queries = relationship("SavedQuery", back_populates="workspace", cascade="all, delete-orphan")
     synthesis_results = relationship("SynthesisResult", back_populates="workspace", cascade="all, delete-orphan")
+    research_sessions = relationship("ResearchSession", back_populates="workspace", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Workspace {self.name}>"

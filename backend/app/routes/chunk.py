@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.services.chunking import ChunkingService
+from app.cache import cached
 
 router = APIRouter()
 
@@ -101,6 +102,7 @@ async def chunk_single_paper(
 
 
 @router.get("/chunk/stats", response_model=ChunkStatsResponse, tags=["Chunking"])
+@cached(ttl_seconds=60)  # Cache for 1 minute
 async def get_chunk_stats(
     db: AsyncSession = Depends(get_db),
 ):

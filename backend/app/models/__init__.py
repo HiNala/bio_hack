@@ -15,6 +15,8 @@ from app.models.collection import Collection, CollectionPaper
 from app.models.user_settings import UserSettings
 from app.models.saved_query import SavedQuery
 from app.models.synthesis_result import SynthesisResult
+from app.models.claim import Claim, ClaimEvidence, ClaimCluster, ClaimClusterMember, Contradiction
+from app.models.memory import ResearchSession, SessionQuery, ResearchInsight, MemorySummary
 
 __all__ = [
     "Source",
@@ -29,4 +31,13 @@ __all__ = [
     "UserSettings",
     "SavedQuery",
     "SynthesisResult",
+    "Claim",
+    "ClaimEvidence",
+    "ClaimCluster",
+    "ClaimClusterMember",
+    "Contradiction",
+    "ResearchSession",
+    "SessionQuery",
+    "ResearchInsight",
+    "MemorySummary",
 ]
